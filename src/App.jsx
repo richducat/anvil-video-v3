@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
+const SECTION_DEFAULTS = { intro:2, verse:8, pre:4, chorus:8, break:8, bridge:4, outro:2 };
+const PRESETS = ["Metalcore","Djent","Nu‑Metal","Alt‑Prog"];
+const KEYS = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const SCALES = ["Aeolian (Natural Minor)","Phrygian","Dorian","Harmonic Minor","Locrian (spice)"];
+const TUNINGS = ["Drop D (D A D G B E)","Drop C (C G C F A D)","Drop B (B F# B E G# C#)","Drop A (A E A D F# B)"];
+
 export default function App(){
   const [preset, setPreset] = useState("Metalcore");
   const [key, setKey] = useState("C#");
@@ -11,6 +17,7 @@ export default function App(){
   const [title, setTitle] = useState("");
   const [seed, setSeed] = useState(()=>Math.floor(Math.random()*1e9));
   const rng = useMemo(()=>seededRandom(seed), [seed]);
+  const profile = useMemo(()=>influenceProfile(preset), [preset]);
   const [timeline, setTimeline] = useState(["intro","verse","pre","chorus","verse","pre","chorus","break","bridge","chorus","outro"]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playProgress, setPlayProgress] = useState(0);
@@ -18,7 +25,15 @@ export default function App(){
   const audioRef = useRef(null);
   const rafRef = useRef(0);
 
-  useEffect(()=>{ setTitle(genTitle(rng, preset, influenceProfile(preset))); }, [rng, preset]);
+  const arrangementPlan = useMemo(()=> timeline.map(section=>({
+    section,
+    bars: SECTION_DEFAULTS[section] || 4,
+  })), [timeline]);
+  const totalBars = arrangementPlan.reduce((sum,s)=> sum + s.bars, 0);
+  const barSeconds = beatsPerBarFromTimeSig(timeSig) * beatSeconds(bpm);
+  const estimatedSeconds = Math.max(1, totalBars) * barSeconds;
+
+  useEffect(()=>{ setTitle(genTitle(rng, preset, profile)); }, [rng, preset, profile]);
 
   function influenceProfile(p){ const b = { rapEnergy:.2, anthem:.25, ambient:.2, djent:.35 }; if (p==="Djent") b.djent=.45; if (p==="Nu‑Metal") b.rapEnergy=.45; if (p==="Alt‑Prog") b.ambient=.35; return b; }
 
@@ -28,10 +43,10 @@ export default function App(){
 
   function ensureResume(ctx){ if (ctx.state==="suspended" && ctx.resume){ try{ ctx.resume(); }catch{} } }
 
-  function play(){ if (audioRef.current){ stop(); return; } const Ctx = window.AudioContext || window.webkitAudioContext; const ctx = new Ctx(); ensureResume(ctx); const out = ctx.createGain(); out.gain.value = 0.85; const comp = ctx.createDynamicsCompressor(); comp.threshold.value=-12; comp.knee.value=22; comp.ratio.value=10; comp.attack.value=0.003; comp.release.value=0.25; out.connect(comp); comp.connect(ctx.destination); const prof = influenceProfile(preset); const grid = makeGridFromTimeline({ timeline, bpm, timeSig, preset, prof, rng: seededRandom(seed), targetMin: lengthMin }); const t0 = ctx.currentTime + 0.08; const noise = createNoiseBuffer(ctx); const lowFreq = lowStringFreqFromTuning(tuning); const scaleNotes = buildScale(key, scale); const dur = stepsToSeconds(grid.steps.length, bpm); scheduleBackgroundLayer(ctx, out, t0, dur, scaleNotes); for (let i=0;i<grid.steps.length;i++){ const t = t0 + stepsToSeconds(i, bpm); if (grid.kick[i]) playKick(ctx, t, out); if (grid.snare[i]) playSnare(ctx, t, out, noise); if (grid.hat[i]) playHat(ctx, t, out); if (grid.chug[i]) playChug(ctx, t, out, lowFreq); const ld = grid.lead[i]; if (ld >= 0) playLead(ctx, t, out, freqFromNote(scaleNotes[ld % scaleNotes.length], 4)); } audioRef.current = { ctx, out }; setIsPlaying(true); setClipDuration(dur); startRaf(dur); }
+  function play(){ if (audioRef.current){ stop(); return; } const Ctx = window.AudioContext || window.webkitAudioContext; const ctx = new Ctx(); ensureResume(ctx); const out = ctx.createGain(); out.gain.value = 0.85; const comp = ctx.createDynamicsCompressor(); comp.threshold.value=-12; comp.knee.value=22; comp.ratio.value=10; comp.attack.value=0.003; comp.release.value=0.25; out.connect(comp); comp.connect(ctx.destination); const prof = profile; const grid = makeGridFromTimeline({ timeline, bpm, timeSig, preset, prof, rng: seededRandom(seed), targetMin: lengthMin }); const t0 = ctx.currentTime + 0.08; const noise = createNoiseBuffer(ctx); const lowFreq = lowStringFreqFromTuning(tuning); const scaleNotes = buildScale(key, scale); const dur = stepsToSeconds(grid.steps.length, bpm); scheduleBackgroundLayer(ctx, out, t0, dur, scaleNotes); for (let i=0;i<grid.steps.length;i++){ const t = t0 + stepsToSeconds(i, bpm); if (grid.kick[i]) playKick(ctx, t, out); if (grid.snare[i]) playSnare(ctx, t, out, noise); if (grid.hat[i]) playHat(ctx, t, out); if (grid.chug[i]) playChug(ctx, t, out, lowFreq); const ld = grid.lead[i]; if (ld >= 0) playLead(ctx, t, out, freqFromNote(scaleNotes[ld % scaleNotes.length], 4)); } audioRef.current = { ctx, out }; setIsPlaying(true); setClipDuration(dur); startRaf(dur); }
 
-  async function exportClip(){ const prof = influenceProfile(preset); const grid = makeSongGrid({ bars: 16, bpm, prof, rng: seededRandom(seed) }); await renderAndDownload(grid, `${slug(title||"anvil")}-30s.wav`); }
-  async function exportFull(){ const prof = influenceProfile(preset); const grid = makeGridFromTimeline({ timeline, bpm, timeSig, preset, prof, rng: seededRandom(seed), targetMin: lengthMin }); await renderAndDownload(grid, `${slug(title||"anvil")}-full.wav`); }
+  async function exportClip(){ const prof = profile; const grid = makeSongGrid({ bars: 16, bpm, prof, rng: seededRandom(seed) }); await renderAndDownload(grid, `${slug(title||"anvil")}-30s.wav`); }
+  async function exportFull(){ const prof = profile; const grid = makeGridFromTimeline({ timeline, bpm, timeSig, preset, prof, rng: seededRandom(seed), targetMin: lengthMin }); await renderAndDownload(grid, `${slug(title||"anvil")}-full.wav`); }
 
   async function renderAndDownload(grid, name){ const sr=48000, t0=0.25; const songDur = stepsToSeconds(grid.steps.length, bpm); const bedTail=0.5, renderTail=1.0; const totalTime = t0 + songDur + bedTail + renderTail; const frames = Math.ceil(totalTime * sr); const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext; const ctx = new OfflineCtx(2, frames, sr); const master = ctx.createGain(); master.gain.value = 0.9; const lim = ctx.createDynamicsCompressor(); lim.threshold.value=-6; lim.knee.value=24; lim.ratio.value=20; lim.attack.value=0.003; lim.release.value=0.12; master.connect(lim); lim.connect(ctx.destination); const noise = createNoiseBuffer(ctx); const lowFreq = lowStringFreqFromTuning(tuning); const scaleNotes = buildScale(key, scale); scheduleBackgroundLayer(ctx, master, t0, songDur + bedTail, scaleNotes); for (let i=0;i<grid.steps.length;i++){ const t = t0 + stepsToSeconds(i, bpm); if (grid.kick[i]) playKick(ctx, t, master); if (grid.snare[i]) playSnare(ctx, t, master, noise); if (grid.hat[i]) playHat(ctx, t, master); if (grid.chug[i]) playChug(ctx, t, master, lowFreq); const ld = grid.lead[i]; if (ld >= 0) playLead(ctx, t, master, freqFromNote(scaleNotes[ld % scaleNotes.length], 4)); } const rendered = await ctx.startRendering(); const wav = bufferToWave(rendered); const a = document.createElement("a"); a.href = URL.createObjectURL(wav); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
 
@@ -41,8 +56,6 @@ export default function App(){
   function onDrop(e, i){ e.preventDefault(); const from = Number(e.dataTransfer.getData("text/plain")); if (Number.isNaN(from)) return; setTimeline(t=>{ const arr = t.slice(); const tmp = arr[i]; arr[i] = arr[from]; arr[from] = tmp; return arr; }); }
   function removeAt(i){ setTimeline(t=> t.filter((_,idx)=> idx!==i)); }
   function resetTimeline(){ setTimeline(["intro","verse","pre","chorus","verse","pre","chorus","break","bridge","chorus","outro"]); }
-
-  const keys = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"]; const scales = ["Aeolian (Natural Minor)","Phrygian","Dorian","Harmonic Minor","Locrian (spice)"]; const tunings = ["Drop D (D A D G B E)","Drop C (C G C F A D)","Drop B (B F# B E G# C#)","Drop A (A E A D F# B)"];
 
   return (
     <div className="min-h-[620px] w-full bg-gradient-to-b from-zinc-950 via-zinc-900 to-black text-zinc-100 px-4 pb-6">
@@ -56,70 +69,134 @@ export default function App(){
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto mt-4 grid lg:grid-cols-3 gap-4">
-        <section className="lg:col-span-2 space-y-4">
-          <Card title="Generate & Preview">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <div className="text-xs text-zinc-400 mb-1">Title</div>
-                <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 outline-none" placeholder="Generate a title"/>
+      <div className="max-w-6xl mx-auto mt-4 space-y-4">
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-500/10 via-emerald-400/5 to-transparent p-4 sm:p-6">
+          <div className="absolute -left-10 -top-10 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl" aria-hidden />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Chip tone="emerald">Live demo ready</Chip>
+                <Chip tone="zinc">Seed #{seed}</Chip>
               </div>
-              <div className="flex items-end gap-2 justify-end">
-                {!isPlaying ? (
-                  <button onClick={play} className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold">Generate & Play</button>
-                ) : (
-                  <button onClick={stop} className="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold">Stop</button>
-                )}
+              <h1 className="text-2xl font-semibold tracking-tight">Anvil metal arranger</h1>
+              <p className="text-sm text-zinc-300">Dial in a preset, tweak the energy sliders, and audition the song in-browser before exporting full-quality WAVs.</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Chip tone="zinc">{timeline.length} sections</Chip>
+                <Chip tone="zinc">{totalBars} bars</Chip>
+                <Chip tone="emerald">≈ {fmtTime(estimatedSeconds)}</Chip>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={()=>setSeed(Math.floor(Math.random()*1e9))} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold">New seed</button>
+                <button onClick={()=>setTitle(genTitle(rng, preset, profile))} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs">Regenerate title</button>
               </div>
             </div>
-            <div className="mt-3">
-              <ProgressBar value={playProgress} max={clipDuration||1} />
-              <div className="text-[11px] text-zinc-400 mt-1">{fmtTime(playProgress)} / {fmtTime(clipDuration||0)}</div>
+            <div className="grid grid-cols-2 gap-3 sm:w-[320px]">
+              <Metric label="Preset" value={preset} description="Influence blend" />
+              <Metric label="Tempo" value={`${bpm} BPM`} description={timeSig} />
+              <Metric label="Key & scale" value={`${key} • ${scale.split('(')[0].trim()}`} description={tuning} />
+              <Metric label="Length" value={`${lengthMin.toFixed(1)} min target`} description={`${fmtTime(estimatedSeconds)} est.`} />
             </div>
-          </Card>
+          </div>
+        </div>
 
-          <Card title="Song Timeline">
-            <div className="flex flex-wrap gap-2 mb-2">
-              {timeline.map((s,i)=> (
-                <div key={i} draggable onDragStart={(e)=>onDragStart(e,i)} onDragOver={onDragOver} onDrop={(e)=>onDrop(e,i)} className="flex items-center gap-1 bg-zinc-800/70 border border-white/10 rounded-xl px-2 py-1 select-none">
-                  <span className="text-xs capitalize">{s}</span>
-                  <button onClick={()=>removeAt(i)} className="text-xs px-1 text-rose-400">×</button>
+        <main className="grid lg:grid-cols-3 gap-4">
+          <section className="lg:col-span-2 space-y-4">
+            <Card title="Generate & Preview">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-zinc-400 mb-1">Title</div>
+                  <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 outline-none" placeholder="Generate a title"/>
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <select onChange={e=>{ if(e.target.value){ addSection(e.target.value); e.target.value=""; } }} defaultValue="" className="bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 outline-none text-xs">
-                <option value="" disabled>Add section…</option>
-                <option value="intro">Intro</option>
-                <option value="verse">Verse</option>
-                <option value="pre">Pre‑Chorus</option>
-                <option value="chorus">Chorus</option>
-                <option value="break">Breakdown</option>
-                <option value="bridge">Bridge</option>
-                <option value="outro">Outro</option>
-              </select>
-              <button onClick={resetTimeline} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs">Reset</button>
-            </div>
-          </Card>
-        </section>
+                <div className="flex items-end gap-2 justify-end">
+                  {!isPlaying ? (
+                    <button onClick={play} className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold">Generate & Play</button>
+                  ) : (
+                    <button onClick={stop} className="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold">Stop</button>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3">
+                <ProgressBar value={playProgress} max={clipDuration||1} />
+                <div className="text-[11px] text-zinc-400 mt-1">{fmtTime(playProgress)} / {fmtTime(clipDuration||0)}</div>
+              </div>
+            </Card>
 
-        <aside className="space-y-4">
-          <Card title="Session">
-            <div className="grid grid-cols-2 gap-2">
-              <Select label="Preset" value={preset} onChange={setPreset} options={["Metalcore","Djent","Nu‑Metal","Alt‑Prog"]} />
-              <Select label="Key" value={key} onChange={setKey} options={keys} />
-              <Select label="Scale" value={scale} onChange={setScale} options={scales} />
-              <Select label="Time Sig" value={timeSig} onChange={setTimeSig} options={["4/4","3/4","6/8","7/8","5/4"]} />
-              <Select label="Tuning" value={tuning} onChange={setTuning} options={tunings} />
-              <Slider label={`BPM: ${bpm}`} value={bpm} onChange={setBpm} min={70} max={210} />
-              <Slider label={`Length: ${lengthMin.toFixed(1)} min`} value={lengthMin} onChange={setLengthMin} min={2} max={5} step={0.1} />
-            </div>
-          </Card>
-        </aside>
-      </main>
+            <Card title="Arrangement snapshot">
+              <div className="flex items-center justify-between text-xs text-zinc-400 mb-2">
+                <span>{timeline.length} sections • drag to reorder</span>
+                <span>{totalBars} bars • {fmtTime(estimatedSeconds)}</span>
+              </div>
+              <div className="space-y-2">
+                {arrangementPlan.map((s,i)=> (
+                  <div key={`${s.section}-${i}`} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/5 px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] uppercase tracking-wide text-emerald-200/80">{String(i+1).padStart(2,'0')}</span>
+                      <span className="capitalize text-sm">{friendlySectionName(s.section)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-zinc-300">
+                      <span>{s.bars} bars</span>
+                      <span>{fmtTime(s.bars * barSeconds)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card title="Song Timeline">
+              <div className="flex flex-wrap gap-2 mb-2">
+                {timeline.map((s,i)=> (
+                  <div key={i} draggable onDragStart={(e)=>onDragStart(e,i)} onDragOver={onDragOver} onDrop={(e)=>onDrop(e,i)} className="flex items-center gap-1 bg-zinc-800/70 border border-white/10 rounded-xl px-2 py-1 select-none">
+                    <span className="text-xs capitalize">{friendlySectionName(s)}</span>
+                    <button onClick={()=>removeAt(i)} className="text-xs px-1 text-rose-400">×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <select onChange={e=>{ if(e.target.value){ addSection(e.target.value); e.target.value=""; } }} defaultValue="" className="bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 outline-none text-xs">
+                  <option value="" disabled>Add section…</option>
+                  <option value="intro">Intro</option>
+                  <option value="verse">Verse</option>
+                  <option value="pre">Pre‑Chorus</option>
+                  <option value="chorus">Chorus</option>
+                  <option value="break">Breakdown</option>
+                  <option value="bridge">Bridge</option>
+                  <option value="outro">Outro</option>
+                </select>
+                <button onClick={resetTimeline} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs">Reset</button>
+              </div>
+            </Card>
+          </section>
+
+          <aside className="space-y-4">
+            <Card title="Session">
+              <div className="grid grid-cols-2 gap-2">
+                <Select label="Preset" value={preset} onChange={setPreset} options={PRESETS} />
+                <Select label="Key" value={key} onChange={setKey} options={KEYS} />
+                <Select label="Scale" value={scale} onChange={setScale} options={SCALES} />
+                <Select label="Time Sig" value={timeSig} onChange={setTimeSig} options={["4/4","3/4","6/8","7/8","5/4"]} />
+                <Select label="Tuning" value={tuning} onChange={setTuning} options={TUNINGS} />
+                <Slider label={`BPM: ${bpm}`} value={bpm} onChange={setBpm} min={70} max={210} />
+                <Slider label={`Length: ${lengthMin.toFixed(1)} min`} value={lengthMin} onChange={setLengthMin} min={2} max={5} step={0.1} />
+              </div>
+            </Card>
+
+            <Card title="Influence blend">
+              <div className="space-y-3 text-xs">
+                <InfluenceBar label="Anthemic hooks" value={profile.anthem} />
+                <InfluenceBar label="Rap energy" value={profile.rapEnergy} />
+                <InfluenceBar label="Ambient layer" value={profile.ambient} />
+                <InfluenceBar label="Djent chugs" value={profile.djent} />
+              </div>
+              <p className="text-[11px] text-zinc-400 mt-3">These faders drive drum density, accent hits, and the balance between atmosphere and attack for each generated section.</p>
+            </Card>
+          </aside>
+        </main>
+      </div>
     </div>
   );
 }
+
+function friendlySectionName(section){ if (section==="pre") return "Pre‑Chorus"; return section.charAt(0).toUpperCase() + section.slice(1); }
 
 function Card({ title, children }){
   return (
@@ -128,6 +205,19 @@ function Card({ title, children }){
       {children}
     </div>
   );
+}
+function Metric({ label, value, description }){
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-zinc-400">{label}</div>
+      <div className="text-sm font-semibold text-white">{value}</div>
+      {description ? <div className="text-[11px] text-zinc-500">{description}</div> : null}
+    </div>
+  );
+}
+function Chip({ children, tone="zinc" }){
+  const palette = tone==='emerald' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-300/30' : 'bg-white/5 text-zinc-200 border-white/10';
+  return <span className={`text-[11px] px-2.5 py-1 rounded-full border ${palette}`}>{children}</span>;
 }
 function Select({ label, value, onChange, options }){
   return (
@@ -145,6 +235,17 @@ function Slider({label, value, onChange, min=0, max=100, step=1}){
       <div className="flex items-center justify-between mb-1"><span className="text-zinc-400">{label}</span><span className="text-zinc-400">{typeof value==="number"? Math.round(value) : value}</span></div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e)=>onChange(Number(e.target.value))} className="w-full"/>
     </label>
+  );
+}
+function InfluenceBar({ label, value }){
+  const pct = Math.round(Math.min(1, Math.max(0, value||0)) * 100);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1"><span className="text-zinc-300">{label}</span><span className="text-zinc-400">{pct}%</span></div>
+      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+        <div className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 function ProgressBar({value, max}){ const pct = Math.max(0, Math.min(1, (max ? value/max : 0))); return (<div className="w-full h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{width: `${(pct*100).toFixed(1)}%`}} /></div>); }

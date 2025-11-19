@@ -5,6 +5,32 @@ const PRESETS = ["Metalcore","Djent","Nu‑Metal","Alt‑Prog"];
 const KEYS = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
 const SCALES = ["Aeolian (Natural Minor)","Phrygian","Dorian","Harmonic Minor","Locrian (spice)"];
 const TUNINGS = ["Drop D (D A D G B E)","Drop C (C G C F A D)","Drop B (B F# B E G# C#)","Drop A (A E A D F# B)"];
+const MODEL_LAYER = [
+  {
+    name: "Stable Audio Open",
+    summary: "Latent‑diffusion text→audio (autoencoder + T5 + DiT) tuned for fast, high‑fidelity 44.1 kHz stereo renders and controllable duration."
+  },
+  {
+    name: "MusicGen (AudioCraft)",
+    summary: "Autoregressive EnCodec token LM that locks bar structure, supports melody/chord conditioning, and excels at continue edits."
+  },
+  {
+    name: "Spectrogram diffusion (optional)",
+    summary: "Riffusion‑style text→mel pipelines for style morphs and creative interpolations."
+  }
+];
+const WORKFLOW_CONTROLS = [
+  "Bar/section grid with BPM, meter, and key locks so generation follows the song map.",
+  "Deterministic seeds plus non‑destructive 4‑bar regen windows and A/B take management.",
+  "Instrument & harmony lanes with per‑lane prompts, chord‑track import, and lane‑only regeneration.",
+  "True stems at generation time (multi‑stem MusicGen) with Hybrid Demucs v4 fallback and 24‑bit/48 kHz exports."
+];
+const SYSTEM_ARCH = [
+  "Next.js front‑end with WebAudio previews, arranger grid, and piano roll hooks.",
+  "FastAPI/Node orchestrator with Redis/RQ dispatching GPU workers (A100/L40S) on Kubernetes; per‑job weight loading and object storage for assets.",
+  "Producer LLM agent converts briefs into structured SessionSpec and coordinates model workers, storing a project graph for revision safety.",
+  "Audio ops: EnCodec tokenization, resampling, loudness normalization, Demucs separation, FFmpeg utility, HLS streaming, and exports (stems + MIDI + tempo map + optional AAF/VST3/AU)."
+];
 
 export default function App(){
   const [preset, setPreset] = useState("Metalcore");
@@ -165,6 +191,16 @@ export default function App(){
                 <button onClick={resetTimeline} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs">Reset</button>
               </div>
             </Card>
+
+            <Card title="Pro audio engine blueprint">
+              <div className="grid md:grid-cols-2 gap-4">
+                <BlueprintSection title="Model layer" items={MODEL_LAYER} tone="emerald" />
+                <BlueprintSection title="Pro workflow controls" items={WORKFLOW_CONTROLS} tone="zinc" />
+              </div>
+              <div className="mt-3">
+                <BlueprintSection title="System architecture" items={SYSTEM_ARCH} tone="amber" />
+              </div>
+            </Card>
           </section>
 
           <aside className="space-y-4">
@@ -218,6 +254,33 @@ function Metric({ label, value, description }){
 function Chip({ children, tone="zinc" }){
   const palette = tone==='emerald' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-300/30' : 'bg-white/5 text-zinc-200 border-white/10';
   return <span className={`text-[11px] px-2.5 py-1 rounded-full border ${palette}`}>{children}</span>;
+}
+function BlueprintSection({ title, items, tone="zinc" }){
+  const palette = tone==='emerald'
+    ? 'bg-emerald-500/10 border-emerald-300/30 text-emerald-100'
+    : tone==='amber'
+      ? 'bg-amber-500/10 border-amber-300/30 text-amber-100'
+      : 'bg-white/5 border-white/10 text-zinc-100';
+  return (
+    <div className={`rounded-2xl p-3 border ${palette}`}>
+      <div className="text-[11px] uppercase tracking-wide opacity-90 mb-2">{title}</div>
+      <ul className="space-y-2 text-sm leading-snug text-zinc-100/90">
+        {items.map((item, idx)=> {
+          const content = typeof item === 'string' ? item : item.summary;
+          const heading = typeof item === 'string' ? null : item.name;
+          return (
+            <li key={idx} className="flex gap-2 items-start">
+              <span className="mt-1 h-2 w-2 rounded-full bg-current/70" aria-hidden />
+              <div>
+                {heading ? <div className="font-semibold text-xs text-white">{heading}</div> : null}
+                <div>{content}</div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 function Select({ label, value, onChange, options }){
   return (

@@ -379,28 +379,72 @@ export class SongGenerator {
   async generate(spec){
     const sr = this.sampleRate;
     const beatsPerBar = 4;
-    const secPerBeat = 60 / spec.bpm;
-    const totalBars = spec.structure.reduce((a,b)=>a+b.bars, 0);
+    const bpm = Math.max(40, Math.min(260, Number(spec.bpm) || 120));
+    const secPerBeat = 60 / bpm;
+    const structure = Array.isArray(spec.structure) && spec.structure.length ? spec.structure : this.defaultSpec().structure;
+    const totalBars = Math.max(1, structure.reduce((a,b)=>a+(b?.bars||0), 0));
     const totalBeats = totalBars * beatsPerBar;
-    const totalSec = totalBeats * secPerBeat;
-    const length = Math.ceil(totalSec * sr);
+    const totalSec = Math.max(0.1, totalBeats * secPerBeat);
+    const length = Math.max(1, Math.ceil(totalSec * sr));
     const keySemi = NOTE_TO_SEMI[spec.key] ?? 0;
-    const harmony = makeHarmonyMap(spec.structure, spec.progression, keySemi, spec.mode);
+    const harmony = makeHarmonyMap(structure, spec.progression, keySemi, spec.mode);
+
+    const fullSpec = { ...spec, bpm, structure };
+
+    const offlineSupported = (()=>{
+      try {
+        const Ctx = typeof OfflineAudioContext !== 'undefined' ? OfflineAudioContext : (typeof webkitOfflineAudioContext !== 'undefined' ? webkitOfflineAudioContext : null);
+        if(!Ctx) return false;
+        const test = new Ctx(1, length, sr);
+        test.oncomplete = null;
+        return true;
+      } catch (err){
+        console.warn('OfflineAudioContext unavailable', err);
+        return false;
+      }
+    })();
+
+    if (!offlineSupported){
+      const silence = new AudioBuffer({ length, sampleRate: sr, numberOfChannels: 2 });
+      const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, sampleRate: sr };
+      this._lastMidi = { bpm: fullSpec.bpm, drumEvents: [], bassEvents: [], chordEvents: [], leadEvents: [] };
+      return { stems: { drums: silence, bass: silence, chords: silence, lead: silence }, mix: silence, meta };
+    }
+
+    let toneReady = true;
+    try {
+      await Tone.Offline(()=>{}, 0.01, { channels: 2, sampleRate: sr });
+    } catch (err){
+      toneReady = false;
+      console.warn('Tone.Offline unavailable', err);
+    }
+
+    if (!toneReady){
+      const silence = new AudioBuffer({ length, sampleRate: sr, numberOfChannels: 2 });
+      const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, sampleRate: sr };
+      this._lastMidi = { bpm: fullSpec.bpm, drumEvents: [], bassEvents: [], chordEvents: [], leadEvents: [] };
+      return { stems: { drums: silence, bass: silence, chords: silence, lead: silence }, mix: silence, meta };
+    }
 
     // Events for MIDI export
     const drumEvents=[]; const bassEvents=[]; const chordEvents=[]; const leadEvents=[];
 
+    const renderSafe = async (fn)=>{
+      try { return await fn(); }
+      catch (err){ console.error('Render fallback', err); return new AudioBuffer({ length, sampleRate: sr, numberOfChannels: 2 }); }
+    };
+
     // Render stems
     const [drums, bass, chords, lead] = await Promise.all([
-      this.#renderDrums(length, sr, spec, drumEvents),
-      this.#renderBass(length, sr, spec, harmony, bassEvents),
-      this.#renderChords(length, sr, spec, harmony, chordEvents),
-      this.#renderLead(length, sr, spec, harmony, leadEvents),
+      renderSafe(()=> this.#renderDrums(length, sr, fullSpec, drumEvents)),
+      renderSafe(()=> this.#renderBass(length, sr, fullSpec, harmony, bassEvents)),
+      renderSafe(()=> this.#renderChords(length, sr, fullSpec, harmony, chordEvents)),
+      renderSafe(()=> this.#renderLead(length, sr, fullSpec, harmony, leadEvents)),
     ]);
 
     const mix = await this.#mix([drums,bass,chords,lead]);
 
-    const meta = { totalBars, totalBeats, totalSec, key: spec.key, mode: spec.mode, bpm: spec.bpm, sampleRate: sr };
+    const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, sampleRate: sr };
 
     // attach midi events for export helper
     this._lastMidi = { bpm: spec.bpm, drumEvents, bassEvents, chordEvents, leadEvents };
@@ -421,9 +465,9 @@ export class SongGenerator {
   async #renderDrums(length, sr, spec, midiOut){
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
-    const totalBars = spec.structure.reduce((a,b)=>a+b.bars, 0);
+    const totalBars = Math.max(1, spec.structure.reduce((a,b)=>a+(b?.bars||0), 0));
     const totalBeats = totalBars * beatsPerBar;
-    const totalSec = totalBeats * secPerBeat;
+    const totalSec = Math.max(0.1, totalBeats * secPerBeat);
 
     return Tone.Offline(async ()=>{
       Tone.Transport.cancel(0);
@@ -483,9 +527,9 @@ export class SongGenerator {
   async #renderBass(length, sr, spec, harmony, midiOut){
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
-    const totalBars = harmony.length;
+    const totalBars = Math.max(1, harmony.length || 0);
     const totalBeats = totalBars * beatsPerBar;
-    const totalSec = totalBeats * secPerBeat;
+    const totalSec = Math.max(0.1, totalBeats * secPerBeat);
 
     return Tone.Offline(async ()=>{
       Tone.Transport.cancel(0);
@@ -521,9 +565,9 @@ export class SongGenerator {
   async #renderChords(length, sr, spec, harmony, midiOut){
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
-    const totalBars = harmony.length;
+    const totalBars = Math.max(1, harmony.length || 0);
     const totalBeats = totalBars * beatsPerBar;
-    const totalSec = totalBeats * secPerBeat;
+    const totalSec = Math.max(0.1, totalBeats * secPerBeat);
 
     return Tone.Offline(async ()=>{
       Tone.Transport.cancel(0);
@@ -554,9 +598,9 @@ export class SongGenerator {
   async #renderLead(length, sr, spec, harmony, midiOut){
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
-    const totalBars = harmony.length;
+    const totalBars = Math.max(1, harmony.length || 0);
     const totalBeats = totalBars * beatsPerBar;
-    const totalSec = totalBeats * secPerBeat;
+    const totalSec = Math.max(0.1, totalBeats * secPerBeat);
 
     const keySemi = NOTE_TO_SEMI[spec.key] ?? 0;
     const scale = (spec.mode==='minor') ? MINOR : MAJOR;
@@ -607,7 +651,7 @@ export class SongGenerator {
 
   async #mix(buffers){
     const sr = buffers[0].sampleRate;
-    const len = Math.max(...buffers.map(b=>b.length));
+    const len = Math.max(1, ...buffers.map(b=> Math.max(1, b.length||0)));
     const ctx = new OfflineAudioContext(2, len, sr);
     const mix = ctx.createGain(); mix.gain.value = 0.9; mix.connect(ctx.destination);
     buffers.forEach((b,i)=>{

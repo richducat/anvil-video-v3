@@ -177,390 +177,210 @@ export default function App(){
   function resetTimeline(){ setTimeline(["intro","verse","pre","chorus","verse","pre","chorus","break","bridge","chorus","outro"]); }
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#0d0f15] text-slate-50">
+    <div className="relative min-h-screen w-full overflow-hidden bg-slate-950 text-slate-50">
       <div className="noise-layer" aria-hidden />
       <div className="grid-radial" aria-hidden />
+      <div className="pointer-events-none absolute -left-10 top-12 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" aria-hidden />
+      <div className="pointer-events-none absolute -right-24 -top-10 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" aria-hidden />
 
-      <div className="flex h-screen">
-        <Sidebar seed={seed} onShuffleSeed={()=>setSeed(Math.floor(Math.random()*1e9))} />
-
-        <main className="flex-1 overflow-y-auto border-l border-[#1b202c] bg-[#0f121a]">
-          <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#1b202c] bg-[#0f121a]/90 px-8 py-5 backdrop-blur">
-            <div className="flex items-center gap-3 text-sm text-slate-200">
-              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">Create the</span>
-              <span className="rounded-full bg-[#1c2533] px-3 py-1 text-sm font-semibold text-[#7cc7ff]">beat</span>
-              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">you imagine.</span>
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/70 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/10">
+              <AnvilIcon className="h-6 w-6" />
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-300">
-              <button className="rounded-full bg-[#1d2330] px-3 py-1">Compare</button>
-              <button className="rounded-full bg-[#1d2330] px-3 py-1">Process</button>
+            <div className="leading-tight">
+              <div className="text-sm font-semibold tracking-tight">producer.ai</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300">Metal arranger</div>
             </div>
-          </header>
+          </div>
+          <div className="hidden items-center gap-4 text-xs text-slate-300 sm:flex">
+            <span className="hover:text-white">Product</span>
+            <span className="hover:text-white">Showcase</span>
+            <span className="hover:text-white">Docs</span>
+            <span className="hover:text-white">Roadmap</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={exportMidi} disabled={isRendering} className="rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-slate-100 transition hover:bg-white/10 disabled:opacity-60">MIDI</button>
+            <button onClick={exportClip} disabled={isRendering} className="rounded-xl border border-white/15 px-3 py-2 text-xs font-medium text-slate-100 transition hover:bg-white/10 disabled:opacity-60">Export 30s</button>
+            <button onClick={exportFull} disabled={isRendering} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-emerald-950 shadow-[0_10px_50px_-16px_rgba(16,185,129,0.8)] transition hover:bg-emerald-400 disabled:opacity-60">Full render</button>
+          </div>
+        </div>
+      </header>
 
-          <div className="grid gap-6 px-8 py-8 lg:grid-cols-[1fr_360px]">
-            <div className="space-y-8">
-              <HeroPrompt title={title} setTitle={setTitle} play={play} isRendering={isRendering} isPlaying={isPlaying} />
+      <main className="relative mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-16 pt-10">
+        <div className="grid items-start gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-emerald-200/80">
+                <Chip tone="emerald">Live composer</Chip>
+                <Chip tone="zinc">Seed #{seed}</Chip>
+                <Chip tone="zinc">{timeline.length} sections</Chip>
+                <Chip tone="emerald">{fmtTime(estimatedSeconds)} est.</Chip>
+              </div>
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl">
+                Producer.ai for heavy music & live stems
+              </h1>
+              <p className="max-w-2xl text-sm text-slate-300">
+                Generate arrangement-aware riffs, regenerate 4-bar clips without losing the groove, and export stems that drop straight into your DAW.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={play} disabled={isRendering} className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-emerald-950 shadow-[0_10px_40px_-15px_rgba(16,185,129,0.8)] transition hover:bg-emerald-400 disabled:opacity-60">
+                  {isRendering ? "Rendering…" : isPlaying ? "Stop preview" : "Generate & preview"}
+                </button>
+                <button onClick={stop} className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/10">Stop playback</button>
+                <button onClick={()=>setSeed(Math.floor(Math.random()*1e9))} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-200 transition hover:bg-white/10">
+                  Shuffle seed
+                </button>
+                <button onClick={()=>setTitle(genTitle(rng, preset, profile))} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-200 transition hover:bg-white/10">
+                  Regenerate title
+                </button>
+              </div>
+            </div>
 
-              <div className="space-y-4">
-                <SectionHeading title="Starters" />
-                <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-                  {STARTERS.map((item, idx)=>(
-                    <StarterCard key={idx} {...item} />
-                  ))}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Metric label="Preset" value={preset} description="Influence blend" />
+              <Metric label="Tempo" value={`${bpm} BPM`} description={timeSig} />
+              <Metric label="Key & scale" value={`${key} • ${scale.split('(')[0].trim()}`} description={tuning} />
+              <Metric label="Length" value={`${lengthMin.toFixed(1)} min target`} description={`${fmtTime(estimatedSeconds)} est.`} />
+            </div>
+
+            <Card title="Producer-grade workflow">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2 text-sm text-slate-200/90">
+                  <p>Every session is mapped as an arrangement grid so stems and MIDI keep the groove when you regen a single bar or lane.</p>
+                  <p className="text-slate-400 text-xs">Stem separation happens at generation time with Demucs fallback for true multi-track exports.</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Chip tone="emerald">Lane-based regen</Chip>
+                  <Chip tone="zinc">Hybrid Demucs v4</Chip>
+                  <Chip tone="emerald">DAW-ready stems</Chip>
+                  <Chip tone="zinc">24-bit / 48 kHz</Chip>
                 </div>
               </div>
+            </Card>
+          </section>
 
+          <section className="space-y-4">
+            <Card title="Session mixer">
               <div className="space-y-4">
-                <SectionHeading title="Explore" />
-                <div className="flex flex-wrap gap-2 text-xs text-slate-300">
-                  <span className="rounded-full bg-[#1d2330] px-3 py-1">Djent</span>
-                  <span className="rounded-full bg-[#1d2330] px-3 py-1">Metalcore</span>
-                  <span className="rounded-full bg-[#1d2330] px-3 py-1">Instrumentals</span>
-                  <span className="rounded-full bg-[#1d2330] px-3 py-1">+ Add tags</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="text-xs text-slate-400 mb-1">Title</div>
+                    <input value={title} onChange={e=>setTitle(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400/60" placeholder="Generate a title" />
+                  </div>
+                  <button onClick={play} disabled={isRendering} className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-emerald-950 shadow-[0_8px_30px_-12px_rgba(16,185,129,0.8)] transition hover:bg-emerald-400 disabled:opacity-60">
+                    {isPlaying ? "Re-render" : "Preview"}
+                  </button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {EXPLORE.map((item, idx)=>(
-                    <ExploreStat key={idx} {...item} />
-                  ))}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {STARTERS.slice(0,3).map((item, idx)=>(
-                    <StarterCard key={`explore-${idx}`} {...item} compact />
-                  ))}
-                </div>
-              </div>
-
-              <Card title="Song timeline">
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {timeline.map((s,i)=>(
-                    <div key={i} draggable onDragStart={(e)=>onDragStart(e,i)} onDragOver={onDragOver} onDrop={(e)=>onDrop(e,i)} className="flex items-center gap-1 rounded-full border border-white/5 bg-white/5 px-3 py-1 text-xs text-slate-100 select-none">
-                      <span className="capitalize">{friendlySectionName(s)}</span>
-                      <button onClick={()=>removeAt(i)} className="text-slate-400">×</button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <select onChange={e=>{ if(e.target.value){ addSection(e.target.value); e.target.value=""; } }} defaultValue="" className="rounded-xl border border-white/10 bg-[#0f121a] px-3 py-2 text-xs text-slate-100 outline-none">
-                    <option value="" disabled>Add section…</option>
-                    <option value="intro">Intro</option>
-                    <option value="verse">Verse</option>
-                    <option value="pre">Pre‑Chorus</option>
-                    <option value="chorus">Chorus</option>
-                    <option value="break">Breakdown</option>
-                    <option value="bridge">Bridge</option>
-                    <option value="outro">Outro</option>
-                  </select>
-                  <button onClick={resetTimeline} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-200 transition hover:bg-white/5">Reset</button>
-                </div>
-              </Card>
-
-              <Card title="Arrangement snapshot">
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
-                  <span>{timeline.length} sections • drag to reorder</span>
+                <ProgressBar value={playProgress} max={clipDuration||1} />
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>{fmtTime(playProgress)} / {fmtTime(clipDuration||0)}</span>
                   <span>{totalBars} bars • {fmtTime(estimatedSeconds)}</span>
                 </div>
-                <div className="space-y-2">
-                  {arrangementPlan.map((s,i)=>(
-                    <div key={`${s.section}-${i}`} className="flex items-center justify-between rounded-xl border border-white/5 bg-[#0f121a] px-3 py-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] uppercase tracking-[0.22em] text-[#7cc7ff]">{String(i+1).padStart(2,'0')}</span>
-                        <span className="capitalize text-sm text-white">{friendlySectionName(s.section)}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-slate-300">
-                        <span>{s.bars} bars</span>
-                        <span>{fmtTime(s.bars * barSeconds)}</span>
-                      </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Select label="Preset" value={preset} onChange={setPreset} options={PRESETS} />
+                  <Select label="Key" value={key} onChange={setKey} options={KEYS} />
+                  <Select label="Scale" value={scale} onChange={setScale} options={SCALES} />
+                  <Select label="Time Sig" value={timeSig} onChange={setTimeSig} options={["4/4","3/4","6/8","7/8","5/4"]} />
+                  <Select label="Tuning" value={tuning} onChange={setTuning} options={TUNINGS} />
+                  <Slider label={`BPM: ${bpm}`} value={bpm} onChange={setBpm} min={70} max={210} />
+                  <Slider label={`Length: ${lengthMin.toFixed(1)} min`} value={lengthMin} onChange={setLengthMin} min={2} max={5} step={0.1} />
+                  <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                    <div className="text-[11px] uppercase tracking-[0.22em] text-emerald-200">Influence</div>
+                    <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-400">
+                      <span>Anthemic hooks</span><span className="text-right text-slate-100">{Math.round(profile.anthem*100)}%</span>
+                      <span>Rap energy</span><span className="text-right text-slate-100">{Math.round(profile.rapEnergy*100)}%</span>
+                      <span>Ambient layer</span><span className="text-right text-slate-100">{Math.round(profile.ambient*100)}%</span>
+                      <span>Djent chugs</span><span className="text-right text-slate-100">{Math.round(profile.djent*100)}%</span>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </Card>
+              </div>
+            </Card>
 
-              <Card title="Pro audio engine blueprint">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <BlueprintSection title="Model layer" items={MODEL_LAYER} tone="emerald" />
-                  <BlueprintSection title="Pro workflow controls" items={WORKFLOW_CONTROLS} tone="zinc" />
+            <Card title="Song timeline">
+              <div className="flex flex-wrap gap-2 mb-2">
+                {timeline.map((s,i)=> (
+                  <div key={i} draggable onDragStart={(e)=>onDragStart(e,i)} onDragOver={onDragOver} onDrop={(e)=>onDrop(e,i)} className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-100 shadow-sm shadow-emerald-500/5 select-none">
+                    <span className="capitalize">{friendlySectionName(s)}</span>
+                    <button onClick={()=>removeAt(i)} className="text-rose-300">×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <select onChange={e=>{ if(e.target.value){ addSection(e.target.value); e.target.value=""; } }} defaultValue="" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-100 outline-none">
+                  <option value="" disabled>Add section…</option>
+                  <option value="intro">Intro</option>
+                  <option value="verse">Verse</option>
+                  <option value="pre">Pre‑Chorus</option>
+                  <option value="chorus">Chorus</option>
+                  <option value="break">Breakdown</option>
+                  <option value="bridge">Bridge</option>
+                  <option value="outro">Outro</option>
+                </select>
+                <button onClick={resetTimeline} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-200 transition hover:bg-white/10">Reset</button>
+              </div>
+            </Card>
+
+            <Card title="Arrangement snapshot">
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                <span>{timeline.length} sections • drag to reorder</span>
+                <span>{totalBars} bars • {fmtTime(estimatedSeconds)}</span>
+              </div>
+              <div className="space-y-2">
+                {arrangementPlan.map((s,i)=> (
+                  <div key={`${s.section}-${i}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] uppercase tracking-[0.22em] text-emerald-200/80">{String(i+1).padStart(2,'0')}</span>
+                      <span className="capitalize text-sm text-white">{friendlySectionName(s.section)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-slate-300">
+                      <span>{s.bars} bars</span>
+                      <span>{fmtTime(s.bars * barSeconds)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </section>
+        </div>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <Card title="Render MIDI with real instruments">
+            <div className="grid gap-3 md:grid-cols-2 text-sm text-slate-200/90">
+              <div className="space-y-2">
+                <p>Export the generated MIDI and run it through pro samplers to get live‑sounding drums and guitars (GGD, Superior Drummer, STL Tones, Neural DSP).</p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-200">
+                  <li>Click <span className="font-semibold">Export MIDI</span> above.</li>
+                  <li>Load the MIDI into your sampler (browser SoundFonts or DAW VSTs).</li>
+                  <li>Render stems for drums, bass, chords, and lead to mirror the browser mix.</li>
+                </ol>
+              </div>
+              <div className="space-y-2">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-slate-400 mb-1">Browser</div>
+                  <p className="text-sm text-slate-200">Pair the MIDI with a SoundFont sampler (Tone.js Sampler or tiny‑sf2) using multi‑sample drum kits and DI guitars re‑amped with IRs.</p>
                 </div>
-                <div className="mt-3">
-                  <BlueprintSection title="System architecture" items={SYSTEM_ARCH} tone="amber" />
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-slate-400 mb-1">Desktop DAW</div>
+                  <p className="text-sm text-slate-200">Drop the MIDI into your DAW and assign GGD, Superior Drummer, STL AmpHub, or Neural DSP for realistic articulations and amp captures.</p>
                 </div>
-              </Card>
+              </div>
             </div>
+          </Card>
 
-            <aside className="space-y-5">
-              <ComposerPanel
-                preset={preset}
-                setPreset={setPreset}
-                keyChoice={key}
-                setKeyChoice={setKey}
-                scale={scale}
-                setScale={setScale}
-                bpm={bpm}
-                setBpm={setBpm}
-                timeSig={timeSig}
-                setTimeSig={setTimeSig}
-                tuning={tuning}
-                setTuning={setTuning}
-                lengthMin={lengthMin}
-                setLengthMin={setLengthMin}
-                profile={profile}
-                seed={seed}
-                setSeed={setSeed}
-                exportMidi={exportMidi}
-                exportClip={exportClip}
-                exportFull={exportFull}
-                isRendering={isRendering}
-                isPlaying={isPlaying}
-                play={play}
-                stop={stop}
-                playProgress={playProgress}
-                clipDuration={clipDuration}
-                totalBars={totalBars}
-                estimatedSeconds={estimatedSeconds}
-              />
-            </aside>
-          </div>
-        </main>
-      </div>
-
-      <NowPlayingBar
-        title={title}
-        playProgress={playProgress}
-        clipDuration={clipDuration}
-        isPlaying={isPlaying}
-        stop={stop}
-      />
-    </div>
-  );
-}
-
-function Sidebar({ seed, onShuffleSeed }){
-  const nav = ["New Session","Songs","Playlists","Projects","Models","Profile"];
-  return (
-    <aside className="hidden w-64 flex-shrink-0 border-r border-[#1b202c] bg-[#0f121a] lg:flex flex-col justify-between">
-      <div className="p-4 space-y-6">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-[#1d2330] flex items-center justify-center">
-            <AnvilIcon className="h-5 w-5 text-slate-200" />
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold">Producer*</div>
-            <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Your music co‑pilot</div>
-          </div>
-        </div>
-        <button className="w-full rounded-xl bg-[#1c2533] px-3 py-2 text-sm font-semibold text-white shadow-inner shadow-black/40">+ New session</button>
-        <nav className="space-y-1 text-sm text-slate-300">
-          {nav.map(item=>(
-            <div key={item} className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-white/5 cursor-pointer">
-              <span>{item}</span>
-              {item==="Songs" ? <span className="text-[10px] rounded-full bg-emerald-500/20 px-2 py-0.5 text-emerald-200">See all</span> : null}
+          <Card title="Pro audio engine blueprint">
+            <div className="grid md:grid-cols-2 gap-4">
+              <BlueprintSection title="Model layer" items={MODEL_LAYER} tone="emerald" />
+              <BlueprintSection title="Pro workflow controls" items={WORKFLOW_CONTROLS} tone="zinc" />
             </div>
-          ))}
-        </nav>
-        <div className="space-y-2 text-xs text-slate-400">
-          <div className="flex items-center justify-between text-slate-300">
-            <span>Recent sessions</span>
-            <button className="text-[11px] text-[#7cc7ff]">See all</button>
-          </div>
-          <div className="rounded-xl border border-white/5 bg-[#0d1017] p-3 space-y-2">
-            <div className="flex items-center justify-between text-slate-200 text-sm">
-              <span>Dark matter</span>
-              <span className="text-xs text-slate-500">Today</span>
+            <div className="mt-3">
+              <BlueprintSection title="System architecture" items={SYSTEM_ARCH} tone="amber" />
             </div>
-            <div className="text-[11px] text-slate-500">Created by Quan</div>
-          </div>
-          <div className="flex items-center justify-between rounded-xl border border-white/5 bg-[#0d1017] px-3 py-2 text-slate-200 text-sm">
-            <span>Seed #{seed}</span>
-            <button onClick={onShuffleSeed} className="text-[11px] text-[#7cc7ff]">Shuffle</button>
-          </div>
-        </div>
-      </div>
-      <div className="p-4 border-t border-[#1b202c]">
-        <div className="rounded-xl bg-[#0d1017] p-3 text-xs text-slate-300 space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" aria-hidden />
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Captain in session</div>
-              <div className="text-slate-100">Quantch</div>
-            </div>
-          </div>
-          <button className="w-full rounded-lg bg-[#1c2533] px-3 py-2 font-semibold text-white">Invite</button>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function HeroPrompt({ title, setTitle, play, isRendering, isPlaying }){
-  return (
-    <div className="rounded-2xl border border-[#1b202c] bg-gradient-to-b from-[#131826] to-[#0f121a] p-6 shadow-[0_20px_60px_-35px_rgba(0,0,0,0.6)]">
-      <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-        <span>Ask Producer…</span>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-[#1d2330] px-2 py-1 text-[11px] text-slate-300">gen</span>
-          <span className="rounded-full bg-[#1d2330] px-2 py-1 text-[11px] text-slate-300">bypass</span>
-          <span className="rounded-full bg-[#1d2330] px-2 py-1 text-[11px] text-slate-300">FX</span>
-        </div>
-      </div>
-      <div className="rounded-xl border border-[#1b202c] bg-[#0d1017] p-4">
-        <textarea
-          value={title}
-          onChange={(e)=>setTitle(e.target.value)}
-          className="w-full resize-none bg-transparent text-sm text-white outline-none"
-          rows={3}
-          placeholder="Ask Producer…"
-        />
-      </div>
-      <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-[#1d2330] px-3 py-1">Chat</span>
-          <span className="rounded-full bg-[#1d2330] px-3 py-1">Models</span>
-        </div>
-        <button onClick={play} disabled={isRendering} className="rounded-xl bg-[#7cc7ff] px-4 py-2 text-sm font-semibold text-[#0b0f17] disabled:opacity-60">
-          {isRendering ? "Rendering…" : isPlaying ? "Stop" : "Generate"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ComposerPanel({
-  preset,
-  setPreset,
-  keyChoice,
-  setKeyChoice,
-  scale,
-  setScale,
-  bpm,
-  setBpm,
-  timeSig,
-  setTimeSig,
-  tuning,
-  setTuning,
-  lengthMin,
-  setLengthMin,
-  profile,
-  seed,
-  setSeed,
-  exportMidi,
-  exportClip,
-  exportFull,
-  isRendering,
-  isPlaying,
-  play,
-  stop,
-  playProgress,
-  clipDuration,
-  totalBars,
-  estimatedSeconds,
-}){
-  return (
-    <div className="rounded-2xl border border-[#1b202c] bg-[#0d1017] p-4 space-y-4">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Compose</div>
-          <div className="text-sm text-white">Add your voice</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="rounded-full bg-[#1d2330] px-3 py-1 text-[11px] text-slate-300">Upload</button>
-          <button className="rounded-full bg-[#1d2330] px-3 py-1 text-[11px] text-slate-300">Record</button>
-        </div>
-      </div>
-
-      <div className="space-y-2 text-xs text-slate-300">
-        <label className="block space-y-1">
-          <span className="text-slate-400">Add your voice</span>
-          <input className="w-full rounded-xl border border-[#1b202c] bg-[#0f121a] px-3 py-2 text-sm text-white outline-none" placeholder="Ask Producer…" />
-        </label>
-        <label className="block space-y-1">
-          <span className="text-slate-400">Add a voice description</span>
-          <textarea rows={2} className="w-full rounded-xl border border-[#1b202c] bg-[#0f121a] px-3 py-2 text-sm text-white outline-none" placeholder="Describe the sound…" />
-        </label>
-      </div>
-
-      <div className="grid gap-3">
-        <Select label="Preset" value={preset} onChange={setPreset} options={PRESETS} />
-        <Select label="Key" value={keyChoice} onChange={setKeyChoice} options={KEYS} />
-        <Select label="Scale" value={scale} onChange={setScale} options={SCALES} />
-        <Select label="Time Signature" value={timeSig} onChange={setTimeSig} options={["4/4","3/4","6/8","7/8","5/4"]} />
-        <Select label="Tuning" value={tuning} onChange={setTuning} options={TUNINGS} />
-        <Slider label={`BPM: ${bpm}`} value={bpm} onChange={setBpm} min={70} max={210} />
-        <Slider label={`Length: ${lengthMin.toFixed(1)} min`} value={lengthMin} onChange={setLengthMin} min={2} max={5} step={0.1} />
-      </div>
-
-      <div className="rounded-xl border border-[#1b202c] bg-[#0f121a] p-3 space-y-2 text-xs text-slate-300">
-        <div className="flex items-center justify-between">
-          <span>Influence</span>
-          <button onClick={()=>setSeed(Math.floor(Math.random()*1e9))} className="text-[11px] text-[#7cc7ff]">Shuffle seed</button>
-        </div>
-        <InfluenceBar label="Anthemic hooks" value={profile.anthem} />
-        <InfluenceBar label="Rap energy" value={profile.rapEnergy} />
-        <InfluenceBar label="Ambient layer" value={profile.ambient} />
-        <InfluenceBar label="Djent chugs" value={profile.djent} />
-      </div>
-
-      <div className="space-y-2 text-xs text-slate-400">
-        <div className="flex items-center justify-between text-slate-200 text-sm">
-          <span>{fmtTime(playProgress)} / {fmtTime(clipDuration||0)}</span>
-          <span>{totalBars} bars • {fmtTime(estimatedSeconds)}</span>
-        </div>
-        <ProgressBar value={playProgress} max={clipDuration||1} />
-        <div className="grid grid-cols-3 gap-2 text-[11px]">
-          <button onClick={play} disabled={isRendering} className="rounded-lg bg-[#7cc7ff] px-3 py-2 font-semibold text-[#0b0f17] disabled:opacity-60">{isPlaying ? "Stop" : "Preview"}</button>
-          <button onClick={exportClip} disabled={isRendering} className="rounded-lg bg-[#1c2533] px-3 py-2 font-semibold text-white disabled:opacity-60">Export 30s</button>
-          <button onClick={exportFull} disabled={isRendering} className="rounded-lg bg-[#1c2533] px-3 py-2 font-semibold text-white disabled:opacity-60">Full render</button>
-        </div>
-        <button onClick={exportMidi} disabled={isRendering} className="w-full rounded-lg border border-[#1b202c] px-3 py-2 text-slate-200 hover:bg-white/5 disabled:opacity-60">Export MIDI</button>
-        <button onClick={stop} className="w-full rounded-lg border border-[#1b202c] px-3 py-2 text-slate-200 hover:bg-white/5">Stop playback</button>
-      </div>
-    </div>
-  );
-}
-
-function NowPlayingBar({ title, playProgress, clipDuration, isPlaying, stop }){
-  return (
-    <div className="fixed bottom-0 left-0 right-0 border-t border-[#1b202c] bg-[#0f121a]/95 px-4 py-3 text-sm text-slate-200 flex items-center gap-3">
-      <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-[#1c2533]"><AnvilIcon className="h-5 w-5" /></div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Producer*</div>
-        <div className="truncate text-white">{title || "djent pre metalcore with drill timing and melodic vocals"}</div>
-        <ProgressBar value={playProgress} max={clipDuration||1} />
-      </div>
-      <div className="flex items-center gap-2 text-xs text-slate-400">
-        <span>{fmtTime(playProgress)}</span>
-        <span>—</span>
-        <span>{fmtTime(clipDuration||0)}</span>
-      </div>
-      <button onClick={stop} className="rounded-full bg-[#1d2330] px-4 py-2 text-sm font-semibold text-white">{isPlaying ? "Pause" : "Stop"}</button>
-    </div>
-  );
-}
-
-function SectionHeading({ title }){
-  return (
-    <div className="flex items-center justify-between text-sm text-slate-200">
-      <span className="font-semibold">{title}</span>
-      <button className="text-[11px] text-[#7cc7ff]">See all</button>
-    </div>
-  );
-}
-
-function StarterCard({ title, thumb, compact=false }){
-  return (
-    <div className={`group overflow-hidden rounded-2xl border border-[#1b202c] bg-[#0d1017] shadow-[0_10px_40px_-30px_rgba(0,0,0,0.8)] ${compact? 'flex items-center gap-3' : ''}`}>
-      <div className={`${compact? 'h-16 w-16' : 'h-36'} overflow-hidden`}> <img src={thumb} alt="Starter" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> </div>
-      <div className={`p-3 ${compact? 'pr-4 text-sm' : 'text-sm'}`}>
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Song</div>
-        <div className="text-white leading-tight line-clamp-2">{title}</div>
-      </div>
-    </div>
-  );
-}
-
-function ExploreStat({ label, value }){
-  return (
-    <div className="rounded-2xl border border-[#1b202c] bg-[#0d1017] p-3 text-sm text-slate-200">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{label}</div>
-      <div className="text-white text-lg">{value}</div>
+          </Card>
+        </section>
+      </main>
     </div>
   );
 }

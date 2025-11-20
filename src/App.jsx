@@ -119,6 +119,23 @@ export default function App(){
 
   async function exportClip(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetBars: 16 }); await renderAndDownload(spec, `${slug(title||"anvil")}-30s.wav`); }
   async function exportFull(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin }); await renderAndDownload(spec, `${slug(title||"anvil")}-full.wav`); }
+  async function exportMidi(){
+    setIsRendering(true);
+    try {
+      const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin });
+      await songGen.generate(spec);
+      const midi = songGen.exportMidi();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(midi);
+      a.download = `${slug(title||"anvil")}.mid`;
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRendering(false);
+    }
+  }
 
   async function renderAndDownload(spec, name){
     setIsRendering(true);
@@ -152,6 +169,7 @@ export default function App(){
           <div className="flex items-center gap-2">
             <button onClick={exportClip} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export 30s</button>
             <button onClick={exportFull} disabled={isRendering} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-xs font-semibold">Export Full</button>
+            <button onClick={exportMidi} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export MIDI</button>
           </div>
         </div>
       </header>
@@ -205,6 +223,29 @@ export default function App(){
               <div className="mt-3">
                 <ProgressBar value={playProgress} max={clipDuration||1} />
                 <div className="text-[11px] text-zinc-400 mt-1">{fmtTime(playProgress)} / {fmtTime(clipDuration||0)}</div>
+              </div>
+            </Card>
+
+            <Card title="Render MIDI with real instruments">
+              <div className="grid md:grid-cols-2 gap-3 text-sm text-zinc-200/90">
+                <div className="space-y-2">
+                  <p className="text-zinc-300">Export the generated MIDI and run it through pro samplers to get live‑sounding drums and guitars (GGD, Superior Drummer, STL Tones, Neural DSP).</p>
+                  <ol className="list-decimal list-inside space-y-1 text-zinc-200">
+                    <li>Click <span className="font-semibold">Export MIDI</span> below.</li>
+                    <li>Load the MIDI into your sampler (browser SoundFonts or DAW VSTs).</li>
+                    <li>Render stems for drums, bass, chords, and lead to mirror the browser mix.</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Browser</div>
+                    <p className="text-sm text-zinc-200">Pair the MIDI with a SoundFont sampler (Tone.js Sampler or tiny‑sf2) using multi‑sample drum kits and DI guitars re‑amped with IRs.</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Desktop DAW</div>
+                    <p className="text-sm text-zinc-200">Drop the MIDI into your DAW and assign GGD, Superior Drummer, STL AmpHub, or Neural DSP for realistic articulations and amp captures.</p>
+                  </div>
+                </div>
               </div>
             </Card>
 

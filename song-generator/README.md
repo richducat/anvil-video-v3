@@ -35,19 +35,18 @@ downloadBlob(gen.encodeWav(stems.drums), 'drums.wav');
 
 ## Rendering MIDI with real instruments
 
-Two options now ship with the generator:
+The generator exposes `exportMidi()` so you can route the same arrangement through higher‑fidelity instruments. To get live‑sounding drums and guitars similar to GetGood Drums, STL Tones, and other pro VST suites, send the exported MIDI into a sampler:
 
-1. **One‑click pro render in the browser** – call `renderInstrumentalMix(spec)` to automatically re‑amp the generated stems through STL/modern‑metal‑inspired drive, cabinet, and room chains, then `encodeWav` to download the upgraded mix:
-   ```js
-   const { mix } = await gen.renderInstrumentalMix(spec);
-   downloadBlob(gen.encodeWav(mix), 'song-pro.wav');
-   ```
-2. **External sampler route** – export MIDI and feed it into dedicated drum/guitar libraries for even more realism:
+1. Export the MIDI right after generation:
    ```js
    const { mix } = await gen.generate(spec);
    const midi = gen.exportMidi();
    downloadBlob(midi, 'song.mid');
-   // open in DAW and assign GetGood Drums, Superior Drummer, STL AmpHub, Neural DSP, etc.
    ```
+2. Load the MIDI into your preferred renderer:
+   - **Browser**: pair the MIDI with a SoundFont‑based sampler such as [Tone.js Sampler](https://tonejs.github.io/docs/14.7.77/Sampler) or [tiny‑sf2](https://github.com/colxi/tiny-sf2) using multi‑sample drum kits and DI guitar samples re‑amped through an impulse response chain.
+   - **Desktop DAW**: drop the MIDI into a DAW session and assign drum/guitar VSTs (GGD, Superior Drummer, STL AmpHub, Neural DSP) to each track for realistic articulations and amp captures.
+3. Render stems per track to mirror the browser workflow. The exported MIDI includes timing, key, tempo, and structure so bar alignment matches the generated audio.
+4. (Optional) Bounce audio offline at 44.1 kHz/24‑bit for maximum fidelity, then re‑import the WAVs into the app if you need in‑browser playback of the upgraded tones.
 
-The in-browser chain applies transient shaping to drums, cabinet convolution to guitars, and mild saturation to bass to approximate high-gain amp captures—no plugins required. For maximum fidelity, you can still bounce MIDI to your DAW and render it through your preferred VSTs.
+This flow lets you prototype arrangements in the browser while leveraging professional sample libraries to achieve lifelike drums and guitars.

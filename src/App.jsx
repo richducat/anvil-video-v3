@@ -137,24 +137,6 @@ export default function App(){
     }
   }
 
-  async function exportProRender(){
-    setIsRendering(true);
-    try {
-      const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin });
-      const { mix } = await songGen.renderInstrumentalMix(spec);
-      const wav = songGen.encodeWav(mix);
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(wav);
-      a.download = `${slug(title||"anvil")}-pro.wav`;
-      a.click();
-      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsRendering(false);
-    }
-  }
-
   async function renderAndDownload(spec, name){
     setIsRendering(true);
     try {
@@ -187,7 +169,6 @@ export default function App(){
           <div className="flex items-center gap-2">
             <button onClick={exportClip} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export 30s</button>
             <button onClick={exportFull} disabled={isRendering} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-xs font-semibold">Export Full</button>
-            <button onClick={exportProRender} disabled={isRendering} className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-xs font-semibold">Export Real Instruments</button>
             <button onClick={exportMidi} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export MIDI</button>
           </div>
         </div>
@@ -245,24 +226,24 @@ export default function App(){
               </div>
             </Card>
 
-            <Card title="Render with real instruments">
+            <Card title="Render MIDI with real instruments">
               <div className="grid md:grid-cols-2 gap-3 text-sm text-zinc-200/90">
                 <div className="space-y-2">
-                  <p className="text-zinc-300">Use the built-in STL/modern-metal style chain to bounce lifelike drums and guitars straight from the browser, or export MIDI if you prefer your own samplers.</p>
+                  <p className="text-zinc-300">Export the generated MIDI and run it through pro samplers to get live‑sounding drums and guitars (GGD, Superior Drummer, STL Tones, Neural DSP).</p>
                   <ol className="list-decimal list-inside space-y-1 text-zinc-200">
-                    <li>Click <span className="font-semibold">Export Real Instruments</span> for a one-click pro render.</li>
-                    <li>Optionally still export MIDI to drive GetGood Drums, Superior Drummer, STL Tones, or Neural DSP.</li>
-                    <li>Re-import the WAV if you want to audition the upgraded tones in-app.</li>
+                    <li>Click <span className="font-semibold">Export MIDI</span> below.</li>
+                    <li>Load the MIDI into your sampler (browser SoundFonts or DAW VSTs).</li>
+                    <li>Render stems for drums, bass, chords, and lead to mirror the browser mix.</li>
                   </ol>
                 </div>
                 <div className="space-y-2">
                   <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Browser bounce</div>
-                    <p className="text-sm text-zinc-200">Offline AudioContext adds transient-shaped drums, saturated bass, and cab convolution on guitars for STL-style tones without plugins.</p>
+                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Browser</div>
+                    <p className="text-sm text-zinc-200">Pair the MIDI with a SoundFont sampler (Tone.js Sampler or tiny‑sf2) using multi‑sample drum kits and DI guitars re‑amped with IRs.</p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">DAW/VST route</div>
-                    <p className="text-sm text-zinc-200">Drop the MIDI into your DAW to render with your favorite drum/guitar suites while keeping the same tempo map and structure.</p>
+                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Desktop DAW</div>
+                    <p className="text-sm text-zinc-200">Drop the MIDI into your DAW and assign GGD, Superior Drummer, STL AmpHub, or Neural DSP for realistic articulations and amp captures.</p>
                   </div>
                 </div>
               </div>

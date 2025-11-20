@@ -1,3 +1,5 @@
+import * as Tone from "tone";
+
 /**
  * Song Generator (ESM) – Songwriter Mode
  * --------------------------------------
@@ -444,172 +446,190 @@ export class SongGenerator {
   // ----- Private: Synthesis Engines -----
 
   async #renderDrums(length, sr, spec, midiOut){
-    const ctx = new OfflineAudioContext(1, length, sr);
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
     const totalBars = spec.structure.reduce((a,b)=>a+b.bars, 0);
     const totalBeats = totalBars * beatsPerBar;
+    const totalSec = totalBeats * secPerBeat;
 
-    const kick = (t)=>{
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(120, t);
-      osc.frequency.exponentialRampToValueAtTime(45, t+0.12);
-      g.gain.setValueAtTime(1.0, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.15);
-      osc.connect(g).connect(ctx.destination);
-      osc.start(t); osc.stop(t+0.16);
-    };
-    const snare = (t)=>{
-      const src = ctx.createBufferSource();
-      const b = ctx.createBuffer(1, Math.round(sr*0.2), sr);
-      const d = b.getChannelData(0);
-      for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*0.6 * (1 - i/d.length);
-      src.buffer = b;
-      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1800; bp.Q.value=0.8;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.6, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.18);
-      src.connect(bp).connect(g).connect(ctx.destination);
-      src.start(t); src.stop(t+0.2);
-    };
-    const hat = (t, open=false)=>{
-      const src = ctx.createBufferSource();
-      const b = ctx.createBuffer(1, Math.round(sr*(open?0.14:0.05)), sr);
-      const d = b.getChannelData(0);
-      for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1) * (open?0.5:0.3);
-      src.buffer = b;
-      const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=6000; hp.Q.value=0.8;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(open?0.4:0.25, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + (open?0.12:0.04));
-      src.connect(hp).connect(g).connect(ctx.destination);
-      src.start(t); src.stop(t + (open?0.14:0.06));
-    };
+    return Tone.Offline(async ()=>{
+      Tone.Transport.cancel(0);
+      Tone.Transport.bpm.value = spec.bpm;
 
-    const rng = prng(spec.seed ^ 0xD0F1CE);
-    for(let b=0; b<totalBeats; b++){
-      const t = b * secPerBeat;
-      const beatInBar = b % beatsPerBar;
-      if(beatInBar===0 || beatInBar===2){ kick(t); midiOut.push({startBeat:b, durBeats:0.1, note:36, vel:110}); }
-      if(beatInBar===1 || beatInBar===3){ snare(t+0.01); midiOut.push({startBeat:b+0.01/spec.bpm*60, durBeats:0.1, note:38, vel:100}); }
-      hat(t); hat(t+secPerBeat*0.5);
-      if(beatInBar===3) hat(t+secPerBeat*0.8, true);
-      // occasional extra kick
-      if(beatInBar===1 && rng() < 0.3){ const tt=t+secPerBeat*0.5; kick(tt); midiOut.push({startBeat:b+0.5, durBeats:0.1, note:36, vel:100}); }
-    }
-    return ctx.startRendering();
+      const drumBus = new Tone.Channel({ volume: -3 }).toDestination();
+      const comp = new Tone.Compressor({ threshold: -8, ratio: 3, attack: 0.002, release: 0.18 }).connect(drumBus);
+
+      const kick = new Tone.MembraneSynth({
+        envelope: { attack: 0.001, decay: 0.45, sustain: 0 },
+        pitchDecay: 0.03,
+        octaves: 2.8
+      }).connect(comp);
+
+      const snare = new Tone.NoiseSynth({
+        noise: { type: 'pink' },
+        envelope: { attack: 0.001, decay: 0.28, sustain: 0 },
+        filterEnvelope: { attack: 0.001, decay: 0.1, sustain: 0, baseFrequency: 1800, octaves: 2 }
+      }).connect(comp);
+
+      const hat = new Tone.NoiseSynth({
+        noise: { type: 'white' },
+        envelope: { attack: 0.001, decay: 0.08, sustain: 0 },
+        filterEnvelope: { attack: 0.001, decay: 0.05, sustain: 0, baseFrequency: 8000, octaves: 1 }
+      });
+      const hatChain = new Tone.MidSideMerge().toDestination();
+      hat.connect(hatChain);
+
+      const rng = prng(spec.seed ^ 0xD0F1CE);
+      for(let b=0; b<totalBeats; b++){
+        const t = b * secPerBeat;
+        const beatInBar = b % beatsPerBar;
+        if(beatInBar===0 || beatInBar===2){
+          Tone.Transport.schedule(time=>{ kick.triggerAttackRelease('C2', '8n', time, 1); }, t);
+          midiOut.push({startBeat:b, durBeats:0.1, note:36, vel:110});
+        }
+        if(beatInBar===1 || beatInBar===3){
+          const snTime = t + 0.01;
+          Tone.Transport.schedule(time=>{ snare.triggerAttackRelease('8n', time, 0.8); }, snTime);
+          midiOut.push({startBeat:b+0.01/spec.bpm*60, durBeats:0.1, note:38, vel:100});
+        }
+        Tone.Transport.schedule(time=>{ hat.triggerAttackRelease('16n', time, 0.35); }, t);
+        Tone.Transport.schedule(time=>{ hat.triggerAttackRelease('16n', time, 0.3); }, t+secPerBeat*0.5);
+        if(beatInBar===3){
+          Tone.Transport.schedule(time=>{ hat.triggerAttackRelease('8n', time, 0.45); }, t+secPerBeat*0.8);
+        }
+        if(beatInBar===1 && rng() < 0.3){
+          const tt = t + secPerBeat*0.5;
+          Tone.Transport.schedule(time=>{ kick.triggerAttackRelease('C2', '8n', time, 0.8); }, tt);
+          midiOut.push({startBeat:b+0.5, durBeats:0.1, note:36, vel:100});
+        }
+      }
+      Tone.Transport.start(0);
+    }, totalSec + 0.5, { channels: 2, sampleRate: sr });
   }
 
   async #renderBass(length, sr, spec, harmony, midiOut){
-    const ctx = new OfflineAudioContext(1, length, sr);
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
     const totalBars = harmony.length;
+    const totalBeats = totalBars * beatsPerBar;
+    const totalSec = totalBeats * secPerBeat;
 
-    const bus = ctx.createGain(); bus.gain.value = 0.8; bus.connect(ctx.destination);
-    let beatCounter = 0;
-    for(let bar=0; bar<totalBars; bar++){
-      const chord = harmony[bar].notes;
-      const root = clamp(chord[0]-12, 36, 60); // C2..B3
-      for(let i=0;i<4;i++){
-        const t = (beatCounter) * secPerBeat;
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 200;
-        osc.type = 'sawtooth';
-        osc.frequency.value = midiToFreq(root);
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.6, t+0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + secPerBeat*0.95);
-        osc.connect(f).connect(g).connect(bus);
-        osc.start(t); osc.stop(t + secPerBeat*0.98);
-        midiOut.push({startBeat: beatCounter, durBeats: 0.95, midi: root, vel: 96});
-        beatCounter++;
+    return Tone.Offline(async ()=>{
+      Tone.Transport.cancel(0);
+      Tone.Transport.bpm.value = spec.bpm;
+
+      const bass = new Tone.MonoSynth({
+        oscillator: { type: 'square' },
+        filter: { type: 'lowpass', rolloff: -24, Q: 1 },
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0.6, release: 0.3 },
+        filterEnvelope: { attack: 0.01, decay: 0.15, sustain: 0.3, release: 0.1, baseFrequency: 80, octaves: 3 }
+      });
+      const sat = new Tone.Distortion(0.2).toDestination();
+      const eq = new Tone.EQ3({ low: 3, mid: -4, high: -6 }).connect(sat);
+      bass.connect(eq);
+
+      let beatCounter = 0;
+      for(let bar=0; bar<totalBars; bar++){
+        const chord = harmony[bar].notes;
+        const root = clamp(chord[0]-12, 36, 60); // C2..B3
+        for(let i=0;i<4;i++){
+          const t = beatCounter * secPerBeat;
+          Tone.Transport.schedule(time=>{
+            bass.triggerAttackRelease(Tone.Frequency(root, 'midi'), secPerBeat * 0.95, time, 0.8);
+          }, t);
+          midiOut.push({startBeat: beatCounter, durBeats: 0.95, midi: root, vel: 96});
+          beatCounter++;
+        }
       }
-    }
-    return ctx.startRendering();
+      Tone.Transport.start(0);
+    }, totalSec + 0.5, { channels: 2, sampleRate: sr });
   }
 
   async #renderChords(length, sr, spec, harmony, midiOut){
-    const ctx = new OfflineAudioContext(1, length, sr);
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
     const totalBars = harmony.length;
-    const bus = ctx.createGain(); bus.gain.value = 0.6; bus.connect(ctx.destination);
+    const totalBeats = totalBars * beatsPerBar;
+    const totalSec = totalBeats * secPerBeat;
 
-    for(let bar=0; bar<totalBars; bar++){
-      const t0 = bar * beatsPerBar * secPerBeat;
-      const notes = harmony[bar].notes;
-      for(const n of notes){
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 1800;
-        osc.type = 'triangle';
-        osc.frequency.value = midiToFreq(n);
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.linearRampToValueAtTime(0.5, t0+0.1);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + beatsPerBar*secPerBeat - 0.02);
-        osc.connect(f).connect(g).connect(bus);
-        osc.start(t0); osc.stop(t0 + beatsPerBar*secPerBeat - 0.01);
+    return Tone.Offline(async ()=>{
+      Tone.Transport.cancel(0);
+      Tone.Transport.bpm.value = spec.bpm;
+
+      const space = new Tone.JCReverb(0.2);
+      const amp = new Tone.Distortion(0.4);
+      const chorus = new Tone.Chorus(2.4, 0.4, 0.35).start();
+      const chords = new Tone.PolySynth(Tone.AMSynth, {
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.08, decay: 0.2, sustain: 0.7, release: 0.4 },
+        filter: { type: 'lowpass', rolloff: -12 },
+      });
+      chords.chain(amp, chorus, space, new Tone.Channel({ pan:-0.12, volume:-4 }).toDestination());
+
+      for(let bar=0; bar<totalBars; bar++){
+        const t0 = bar * beatsPerBar * secPerBeat;
+        const notes = harmony[bar].notes;
+        Tone.Transport.schedule(time=>{
+          chords.triggerAttackRelease(notes.map(n=>Tone.Frequency(n, 'midi')), beatsPerBar*secPerBeat, time, 0.7);
+        }, t0);
+        midiOut.push({startBeat: bar*beatsPerBar, durBeats: beatsPerBar, midis: notes.slice(), vel: 90});
       }
-      midiOut.push({startBeat: bar*beatsPerBar, durBeats: beatsPerBar, midis: notes.slice(), vel: 90});
-    }
-    return ctx.startRendering();
+      Tone.Transport.start(0);
+    }, totalSec + 0.5, { channels: 2, sampleRate: sr });
   }
 
   async #renderLead(length, sr, spec, harmony, midiOut){
-    const ctx = new OfflineAudioContext(1, length, sr);
     const beatsPerBar = 4;
     const secPerBeat = 60 / spec.bpm;
     const totalBars = harmony.length;
-    const bus = ctx.createGain(); bus.gain.value = 0.5; bus.connect(ctx.destination);
+    const totalBeats = totalBars * beatsPerBar;
+    const totalSec = totalBeats * secPerBeat;
 
     const keySemi = NOTE_TO_SEMI[spec.key] ?? 0;
     const scale = (spec.mode==='minor') ? MINOR : MAJOR;
     const rng = prng((spec.seed ^ 0xBADA55) >>> 0);
-    let current = 72 + keySemi; // around C5
 
-    for(let bar=0; bar<totalBars; bar++){
-      const chord = harmony[bar].notes.map(n=>n+12);
-      let pos = 0;
-      while(pos < beatsPerBar){
-        const sixteenth = rng() < 0.4;
-        const dur = sixteenth ? 0.25 : 0.5; // beats
-        const startBeat = bar*beatsPerBar + pos;
-        // choose next target
-        let target;
-        if(rng() < 0.6){
-          target = chord[Math.floor(rng()*chord.length)];
-        } else {
-          const degree = Math.floor(rng()*7);
-          const base = 70 + keySemi + scale[degree] + 12*Math.floor(rng()*2);
-          target = clamp(base, 67, 88);
+    return Tone.Offline(async ()=>{
+      Tone.Transport.cancel(0);
+      Tone.Transport.bpm.value = spec.bpm;
+
+      const vibrato = new Tone.Vibrato(6, 0.2);
+      const delay = new Tone.FeedbackDelay(0.22, 0.35);
+      const lead = new Tone.MonoSynth({
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.25 },
+        filter: { type: 'lowpass', rolloff: -12 },
+        filterEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2, baseFrequency: 600, octaves: 3 }
+      });
+      lead.chain(vibrato, delay, new Tone.Channel({ pan: 0.14, volume: -6 }).toDestination());
+
+      let current = 72 + keySemi; // around C5
+      for(let bar=0; bar<totalBars; bar++){
+        const chord = harmony[bar].notes.map(n=>n+12);
+        let pos = 0;
+        while(pos < beatsPerBar){
+          const sixteenth = rng() < 0.4;
+          const dur = sixteenth ? 0.25 : 0.5; // beats
+          const startBeat = bar*beatsPerBar + pos;
+          let target;
+          if(rng() < 0.6){
+            target = chord[Math.floor(rng()*chord.length)];
+          } else {
+            const degree = Math.floor(rng()*7);
+            const base = 70 + keySemi + scale[degree] + 12*Math.floor(rng()*2);
+            target = clamp(base, 67, 88);
+          }
+          current = target;
+          const start = startBeat * secPerBeat;
+          Tone.Transport.schedule(time=>{
+            lead.triggerAttackRelease(Tone.Frequency(current, 'midi'), dur*secPerBeat, time, 0.85);
+          }, start);
+          midiOut.push({startBeat, durBeats: dur, midi: current, vel: 96});
+          pos += dur;
         }
-        current = target;
-        const start = startBeat * secPerBeat;
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2400;
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(midiToFreq(current), start);
-        // light vibrato
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain(); lfo.frequency.value = 5; lfoGain.gain.value = 3;
-        lfo.connect(lfoGain).connect(osc.frequency);
-        g.gain.setValueAtTime(0.0001, start);
-        g.gain.linearRampToValueAtTime(0.5, start+0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, start + dur*secPerBeat - 0.01);
-        osc.connect(f).connect(g).connect(bus);
-        osc.start(start); lfo.start(start);
-        const stopAt = start + dur*secPerBeat;
-        osc.stop(stopAt); lfo.stop(stopAt);
-        midiOut.push({startBeat, durBeats: dur, midi: current, vel: 96});
-        pos += dur;
       }
-    }
-    return ctx.startRendering();
+      Tone.Transport.start(0);
+    }, totalSec + 0.5, { channels: 2, sampleRate: sr });
   }
 
   async #mix(buffers){

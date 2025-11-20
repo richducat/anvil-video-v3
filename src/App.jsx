@@ -9,11 +9,11 @@ const TUNINGS = ["Drop D (D A D G B E)","Drop C (C G C F A D)","Drop B (B F# B E
 const MODEL_LAYER = [
   {
     name: "Stable Audio Open",
-    summary: "Latent‑diffusion text→audio (autoencoder + T5 + DiT) tuned for fast, high‑fidelity 44.1 kHz stereo renders and controllable duration."
+    summary: "Latent‑diffusion text→audio tuned for fast, high‑fidelity 44.1 kHz stereo renders."
   },
   {
     name: "MusicGen (AudioCraft)",
-    summary: "Autoregressive EnCodec token LM that locks bar structure, supports melody/chord conditioning, and excels at continue edits."
+    summary: "Autoregressive EnCodec token LM that locks bar structure and supports conditioned edits."
   },
   {
     name: "Spectrogram diffusion (optional)",
@@ -21,16 +21,31 @@ const MODEL_LAYER = [
   }
 ];
 const WORKFLOW_CONTROLS = [
-  "Bar/section grid with BPM, meter, and key locks so generation follows the song map.",
+  "Arrangement grid with BPM, meter, and key locks so generation follows the song map.",
   "Deterministic seeds plus non‑destructive 4‑bar regen windows and A/B take management.",
   "Instrument & harmony lanes with per‑lane prompts, chord‑track import, and lane‑only regeneration.",
-  "True stems at generation time (multi‑stem MusicGen) with Hybrid Demucs v4 fallback and 24‑bit/48 kHz exports."
+  "True stems at generation time (multi‑stem MusicGen) with Demucs fallback and 24‑bit/48 kHz exports."
 ];
 const SYSTEM_ARCH = [
   "Next.js front‑end with WebAudio previews, arranger grid, and piano roll hooks.",
-  "FastAPI/Node orchestrator with Redis/RQ dispatching GPU workers (A100/L40S) on Kubernetes; per‑job weight loading and object storage for assets.",
+  "FastAPI/Node orchestrator with Redis/RQ dispatching GPU workers on Kubernetes; per‑job weight loading and object storage for assets.",
   "Producer LLM agent converts briefs into structured SessionSpec and coordinates model workers, storing a project graph for revision safety.",
   "Audio ops: EnCodec tokenization, resampling, loudness normalization, Demucs separation, FFmpeg utility, HLS streaming, and exports (stems + MIDI + tempo map + optional AAF/VST3/AU)."
+];
+const STARTERS = [
+  { title: "Djent pre metalcore with drill timing and melodic vocals", thumb: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=900&q=80" },
+  { title: "Djent alt R&B style instrumentals", thumb: "https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?auto=format&fit=crop&w=900&q=80" },
+  { title: "Djent with demonic vocals", thumb: "https://images.unsplash.com/photo-1464375117522-1311d6a5b81f?auto=format&fit=crop&w=900&q=80" },
+  { title: "Djent", thumb: "https://images.unsplash.com/photo-1454922915609-78549ad709bb?auto=format&fit=crop&w=900&q=80" },
+  { title: "Djent alt R&B style instrumentals", thumb: "https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?auto=format&fit=crop&w=900&q=80" },
+  { title: "Djent", thumb: "https://images.unsplash.com/photo-1454922915609-78549ad709bb?auto=format&fit=crop&w=900&q=80" },
+];
+const EXPLORE = [
+  { label: "Instruments", value: "+1" },
+  { label: "Progression", value: "+2" },
+  { label: "Key", value: "C#" },
+  { label: "Seed", value: "48" },
+  { label: "Time signature", value: "4/4" },
 ];
 
 export default function App(){
@@ -117,7 +132,7 @@ export default function App(){
     }
   }
 
-  async function exportClip(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetBars: 16 }); await renderAndDownload(spec, `${slug(title||"anvil")}-30s.wav`); }
+  async function exportClip(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetBars: 16}); await renderAndDownload(spec, `${slug(title||"anvil")}-30s.wav`); }
   async function exportFull(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin }); await renderAndDownload(spec, `${slug(title||"anvil")}-full.wav`); }
   async function exportMidi(){
     setIsRendering(true);
@@ -391,18 +406,9 @@ function normalizeBars({ baseBars, targetMin, targetBars, bpm, timeSig }){
 
 function Card({ title, children }){
   return (
-    <div className="bg-white/5 rounded-2xl border border-white/10 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]">
-      <h3 className="text-sm font-semibold tracking-wide text-zinc-200 mb-3">{title}</h3>
+    <div className="bg-[#0d1017] rounded-2xl border border-[#1b202c] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <h3 className="text-sm font-semibold tracking-wide text-slate-200 mb-3">{title}</h3>
       {children}
-    </div>
-  );
-}
-function Metric({ label, value, description }){
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/40 px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-zinc-400">{label}</div>
-      <div className="text-sm font-semibold text-white">{value}</div>
-      {description ? <div className="text-[11px] text-zinc-500">{description}</div> : null}
     </div>
   );
 }
@@ -415,11 +421,11 @@ function BlueprintSection({ title, items, tone="zinc" }){
     ? 'bg-emerald-500/10 border-emerald-300/30 text-emerald-100'
     : tone==='amber'
       ? 'bg-amber-500/10 border-amber-300/30 text-amber-100'
-      : 'bg-white/5 border-white/10 text-zinc-100';
+      : 'bg-white/5 border-white/10 text-slate-100';
   return (
     <div className={`rounded-2xl p-3 border ${palette}`}>
       <div className="text-[11px] uppercase tracking-wide opacity-90 mb-2">{title}</div>
-      <ul className="space-y-2 text-sm leading-snug text-zinc-100/90">
+      <ul className="space-y-2 text-sm leading-snug text-slate-100/90">
         {items.map((item, idx)=> {
           const content = typeof item === 'string' ? item : item.summary;
           const heading = typeof item === 'string' ? null : item.name;
@@ -439,9 +445,9 @@ function BlueprintSection({ title, items, tone="zinc" }){
 }
 function Select({ label, value, onChange, options }){
   return (
-    <label className="flex flex-col text-xs">
-      <span className="text-zinc-400 mb-1">{label}</span>
-      <select value={value} onChange={(e)=>onChange(e.target.value)} className="bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 outline-none">
+    <label className="flex flex-col text-xs gap-1">
+      <span className="text-slate-400">{label}</span>
+      <select value={value} onChange={(e)=>onChange(e.target.value)} className="bg-[#0f121a] border border-[#1b202c] rounded-xl px-3 py-2 outline-none text-white">
         {options.map(o=> <option key={o} value={o}>{o}</option>)}
       </select>
     </label>
@@ -449,9 +455,9 @@ function Select({ label, value, onChange, options }){
 }
 function Slider({label, value, onChange, min=0, max=100, step=1}){
   return (
-    <label className="block text-xs">
-      <div className="flex items-center justify-between mb-1"><span className="text-zinc-400">{label}</span><span className="text-zinc-400">{typeof value==="number"? Math.round(value) : value}</span></div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e)=>onChange(Number(e.target.value))} className="w-full"/>
+    <label className="block text-xs space-y-1">
+      <div className="flex items-center justify-between"><span className="text-slate-400">{label}</span><span className="text-slate-400">{typeof value==="number"? Math.round(value) : value}</span></div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e)=>onChange(Number(e.target.value))} className="w-full accent-[#7cc7ff]"/>
     </label>
   );
 }
@@ -459,14 +465,14 @@ function InfluenceBar({ label, value }){
   const pct = Math.round(Math.min(1, Math.max(0, value||0)) * 100);
   return (
     <div>
-      <div className="flex items-center justify-between mb-1"><span className="text-zinc-300">{label}</span><span className="text-zinc-400">{pct}%</span></div>
+      <div className="flex items-center justify-between mb-1 text-[11px]"><span className="text-slate-300">{label}</span><span className="text-slate-400">{pct}%</span></div>
       <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-gradient-to-r from-[#7cc7ff] via-[#7cc7ff] to-[#7cc7ff]" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
-function ProgressBar({value, max}){ const pct = Math.max(0, Math.min(1, (max ? value/max : 0))); return (<div className="w-full h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{width: `${(pct*100).toFixed(1)}%`}} /></div>); }
+function ProgressBar({value, max}){ const pct = Math.max(0, Math.min(1, (max ? value/max : 0))); return (<div className="w-full h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-[#7cc7ff]" style={{width: `${(pct*100).toFixed(1)}%`}} /></div>); }
 function AnvilIcon({className="w-6 h-6"}){ return (<svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden><path d="M21 8h-3l-1-2H7L6 8H3a1 1 0 0 0 0 2h7v2.2l-3.5 1.4a2 2 0 0 0-1.2 1.8V16h14v-0.6a2 2 0 0 0-1.2-1.8L14 12.2V10h7a1 1 0 0 0 0-2z"/></svg>); }
 
 function stepsPerBar(){ return 16; }

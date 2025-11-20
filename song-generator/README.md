@@ -29,6 +29,25 @@ Copy `song_generator.esm.js` into your app and import it:
   downloadBlob(midi, 'song.mid');
 
   // individual stems:
-  downloadBlob(gen.encodeWav(stems.drums), 'drums.wav');
+downloadBlob(gen.encodeWav(stems.drums), 'drums.wav');
 </script>
 ```
+
+## Rendering MIDI with real instruments
+
+Two options now ship with the generator:
+
+1. **One‑click pro render in the browser** – call `renderInstrumentalMix(spec)` to automatically re‑amp the generated stems through STL/modern‑metal‑inspired drive, cabinet, and room chains, then `encodeWav` to download the upgraded mix:
+   ```js
+   const { mix } = await gen.renderInstrumentalMix(spec);
+   downloadBlob(gen.encodeWav(mix), 'song-pro.wav');
+   ```
+2. **External sampler route** – export MIDI and feed it into dedicated drum/guitar libraries for even more realism:
+   ```js
+   const { mix } = await gen.generate(spec);
+   const midi = gen.exportMidi();
+   downloadBlob(midi, 'song.mid');
+   // open in DAW and assign GetGood Drums, Superior Drummer, STL AmpHub, Neural DSP, etc.
+   ```
+
+The in-browser chain applies transient shaping to drums, cabinet convolution to guitars, and mild saturation to bass to approximate high-gain amp captures—no plugins required. For maximum fidelity, you can still bounce MIDI to your DAW and render it through your preferred VSTs.

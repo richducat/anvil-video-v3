@@ -194,6 +194,49 @@ function encodeWav(audioBuffer){
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
+// ---------------------- Amp / Cabinet helpers for pro-toned renders ----------------------
+function makeDriveCurve(amount=1.4){
+  const n = 2048;
+  const curve = new Float32Array(n);
+  const k = amount * 10;
+  for(let i=0;i<n;i++){
+    const x = (i / (n-1)) * 2 - 1;
+    curve[i] = (1 + k) * x / (1 + k * Math.abs(x));
+  }
+  return curve;
+}
+
+function makeCabImpulse(ctx, lenSec=0.18){
+  const len = Math.max(1, Math.floor(lenSec * ctx.sampleRate));
+  const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const ch = impulse.getChannelData(c);
+    for(let i=0;i<len;i++){
+      const t = i / len;
+      // quick decay with gentle HF rolloff to emulate a 4x12 IR tail
+      const env = Math.pow(1 - t, 3.4);
+      ch[i] = (Math.random()*2-1) * env * 0.3 + (Math.random()*2-1) * env * 0.05;
+      if(i>0) ch[i] = ch[i-1]*0.94 + ch[i]*0.06;
+    }
+  }
+  return impulse;
+}
+
+function makeRoomImpulse(ctx, lenSec=0.24){
+  const len = Math.max(1, Math.floor(lenSec * ctx.sampleRate));
+  const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const ch = impulse.getChannelData(c);
+    for(let i=0;i<len;i++){
+      const t = i / len;
+      const env = Math.pow(1 - t, 2.6);
+      ch[i] = (Math.random()*2-1) * env * 0.22;
+      if(i>0) ch[i] = ch[i-1]*0.9 + ch[i]*0.1;
+    }
+  }
+  return impulse;
+}
+
 // ---------------------- MIDI Writer (Type-0 multi-track feel using meta, or Type-1 minimal) ----------------------
 /**
  * Minimal MIDI writer (Type 1) with 4 tracks: drums (ch10), bass (ch1), chords (ch2), lead (ch3)
@@ -376,6 +419,17 @@ export class SongGenerator {
     // attach midi events for export helper
     this._lastMidi = { bpm: spec.bpm, drumEvents, bassEvents, chordEvents, leadEvents };
     return { stems: {drums, bass, chords, lead}, mix, meta };
+  }
+
+  /**
+   * Render the song with higher-fidelity chains that mimic STL/modern metal tones.
+   * @param {SessionSpec} spec
+   * @returns {Promise<{stems:{drums:AudioBuffer,bass:AudioBuffer,chords:AudioBuffer,lead:AudioBuffer}, mix: AudioBuffer, meta:Object}>}
+   */
+  async renderInstrumentalMix(spec){
+    const { stems, meta } = await this.generate(spec);
+    const mix = await this.#renderWithInstrumentChains(stems);
+    return { stems, mix, meta: { ...meta, render: 'instrumental' } };
   }
 
   /** Export last generated MIDI as Blob */
@@ -571,6 +625,64 @@ export class SongGenerator {
       src.connect(pan).connect(mix);
       src.start(0);
     });
+    return ctx.startRendering();
+  }
+
+  async #renderWithInstrumentChains(stems){
+    const sr = stems.drums.sampleRate;
+    const len = Math.max(...Object.values(stems).map(b=>b.length));
+    const ctx = new OfflineAudioContext(2, len, sr);
+
+    const master = ctx.createGain(); master.gain.value = 0.9;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -10; comp.ratio.value = 3; comp.attack.value = 0.004; comp.release.value = 0.22;
+    comp.connect(master).connect(ctx.destination);
+
+    const cabIR = makeCabImpulse(ctx);
+    const roomIR = makeRoomImpulse(ctx);
+
+    const addSource = (buffer, chain)=>{
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      let node = chain ? chain(src) : src;
+      node.connect(comp);
+      src.start(0);
+    };
+
+    const guitarChain = (pan=0)=> (src)=>{
+      const pre = ctx.createGain(); pre.gain.value = 1.4;
+      const drive = ctx.createWaveShaper(); drive.curve = makeDriveCurve(1.6);
+      const cab = ctx.createConvolver(); cab.buffer = cabIR;
+      const tilt = ctx.createBiquadFilter(); tilt.type='lowshelf'; tilt.frequency.value=120; tilt.gain.value=-2;
+      const sheen = ctx.createBiquadFilter(); sheen.type='highshelf'; sheen.frequency.value=4500; sheen.gain.value=-3;
+      const p = ctx.createStereoPanner(); p.pan.value = pan;
+      src.connect(pre).connect(drive).connect(cab).connect(tilt).connect(sheen).connect(p);
+      return p;
+    };
+
+    const bassChain = (src)=>{
+      const sat = ctx.createWaveShaper(); sat.curve = makeDriveCurve(0.8);
+      const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 180;
+      src.connect(sat).connect(lp);
+      return lp;
+    };
+
+    const drumChain = (src)=>{
+      const transient = ctx.createWaveShaper(); transient.curve = makeDriveCurve(0.6);
+      const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 38;
+      const sheen = ctx.createBiquadFilter(); sheen.type='highshelf'; sheen.frequency.value = 8000; sheen.gain.value = 4;
+      const roomSend = ctx.createGain(); roomSend.gain.value = 0.22;
+      const room = ctx.createConvolver(); room.buffer = roomIR;
+      src.connect(transient).connect(hp).connect(sheen);
+      sheen.connect(roomSend).connect(room).connect(comp);
+      return sheen;
+    };
+
+    addSource(stems.drums, drumChain);
+    addSource(stems.bass, bassChain);
+    addSource(stems.chords, guitarChain(-0.14));
+    addSource(stems.lead, guitarChain(0.12));
+
     return ctx.startRendering();
   }
 }

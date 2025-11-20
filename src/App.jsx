@@ -119,6 +119,41 @@ export default function App(){
 
   async function exportClip(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetBars: 16 }); await renderAndDownload(spec, `${slug(title||"anvil")}-30s.wav`); }
   async function exportFull(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin }); await renderAndDownload(spec, `${slug(title||"anvil")}-full.wav`); }
+  async function exportMidi(){
+    setIsRendering(true);
+    try {
+      const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin });
+      await songGen.generate(spec);
+      const midi = songGen.exportMidi();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(midi);
+      a.download = `${slug(title||"anvil")}.mid`;
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRendering(false);
+    }
+  }
+
+  async function exportProRender(){
+    setIsRendering(true);
+    try {
+      const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin });
+      const { mix } = await songGen.renderInstrumentalMix(spec);
+      const wav = songGen.encodeWav(mix);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(wav);
+      a.download = `${slug(title||"anvil")}-pro.wav`;
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRendering(false);
+    }
+  }
 
   async function renderAndDownload(spec, name){
     setIsRendering(true);
@@ -152,6 +187,8 @@ export default function App(){
           <div className="flex items-center gap-2">
             <button onClick={exportClip} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export 30s</button>
             <button onClick={exportFull} disabled={isRendering} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-xs font-semibold">Export Full</button>
+            <button onClick={exportProRender} disabled={isRendering} className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-xs font-semibold">Export Real Instruments</button>
+            <button onClick={exportMidi} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export MIDI</button>
           </div>
         </div>
       </header>
@@ -205,6 +242,29 @@ export default function App(){
               <div className="mt-3">
                 <ProgressBar value={playProgress} max={clipDuration||1} />
                 <div className="text-[11px] text-zinc-400 mt-1">{fmtTime(playProgress)} / {fmtTime(clipDuration||0)}</div>
+              </div>
+            </Card>
+
+            <Card title="Render with real instruments">
+              <div className="grid md:grid-cols-2 gap-3 text-sm text-zinc-200/90">
+                <div className="space-y-2">
+                  <p className="text-zinc-300">Use the built-in STL/modern-metal style chain to bounce lifelike drums and guitars straight from the browser, or export MIDI if you prefer your own samplers.</p>
+                  <ol className="list-decimal list-inside space-y-1 text-zinc-200">
+                    <li>Click <span className="font-semibold">Export Real Instruments</span> for a one-click pro render.</li>
+                    <li>Optionally still export MIDI to drive GetGood Drums, Superior Drummer, STL Tones, or Neural DSP.</li>
+                    <li>Re-import the WAV if you want to audition the upgraded tones in-app.</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">Browser bounce</div>
+                    <p className="text-sm text-zinc-200">Offline AudioContext adds transient-shaped drums, saturated bass, and cab convolution on guitars for STL-style tones without plugins.</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1">DAW/VST route</div>
+                    <p className="text-sm text-zinc-200">Drop the MIDI into your DAW to render with your favorite drum/guitar suites while keeping the same tempo map and structure.</p>
+                  </div>
+                </div>
               </div>
             </Card>
 

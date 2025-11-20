@@ -2,8 +2,6 @@
 
 A drop‑in, deterministic, bar‑aligned song generator for **browser apps**. Produces **stems (AudioBuffers)** for *drums, bass, chords, lead* and a **mix**, with helpers to export **WAV** and **MIDI**. Uses WebAudio offline rendering so it works **entirely client‑side**.
 
-> Updated for more **live/producer-grade tone**: stereo 48 kHz rendering, multi-layered drums with reverb sends, detuned chord stacks with chorus, saturated bass glides, and expressive lead phrasing.
-
 > Use this to prove songwriter UX (sections, chords, seeds, exports) then swap in model workers later.
 
 ## Install / Use

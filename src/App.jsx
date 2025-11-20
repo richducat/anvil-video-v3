@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { SongGenerator } from "../song-generator/song_generator.esm.js";
 
 const SECTION_DEFAULTS = { intro:2, verse:8, pre:4, chorus:8, break:8, bridge:4, outro:2 };
 const PRESETS = ["Metalcore","Djent","Nu‑Metal","Alt‑Prog"];
@@ -48,8 +49,10 @@ export default function App(){
   const [isPlaying, setIsPlaying] = useState(false);
   const [playProgress, setPlayProgress] = useState(0);
   const [clipDuration, setClipDuration] = useState(0);
+  const [isRendering, setIsRendering] = useState(false);
   const audioRef = useRef(null);
   const rafRef = useRef(0);
+  const songGen = useMemo(()=> new SongGenerator({ sampleRate: 44100 }), []);
 
   const arrangementPlan = useMemo(()=> timeline.map(section=>({
     section,
@@ -61,20 +64,78 @@ export default function App(){
 
   useEffect(()=>{ setTitle(genTitle(rng, preset, profile)); }, [rng, preset, profile]);
 
+  function buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin, targetBars }){
+    const baseBars = timeline.map(s=> SECTION_DEFAULTS[s] || 4);
+    const bars = normalizeBars({ baseBars, targetMin, targetBars, bpm, timeSig });
+    const structure = timeline.map((section, i)=> ({ name: friendlySectionName(section), bars: bars[i] }));
+    return {
+      seed,
+      style: preset,
+      key,
+      mode: scaleToMode(scale),
+      bpm,
+      ts: timeSig,
+      progression: "I V vi IV",
+      structure,
+      regen: { lane: 'lead', startBar: 1, bars: 4 }
+    };
+  }
+
   function influenceProfile(p){ const b = { rapEnergy:.2, anthem:.25, ambient:.2, djent:.35 }; if (p==="Djent") b.djent=.45; if (p==="Nu‑Metal") b.rapEnergy=.45; if (p==="Alt‑Prog") b.ambient=.35; return b; }
 
   function startRaf(duration){ const start = performance.now()/1000; const tick = ()=>{ const elapsed = (performance.now()/1000) - start; setPlayProgress(Math.min(duration, elapsed)); if (elapsed < duration && audioRef.current){ rafRef.current = requestAnimationFrame(tick); } else { stop(); } }; rafRef.current = requestAnimationFrame(tick); }
 
-  function stop(){ if (!audioRef.current){ setIsPlaying(false); setPlayProgress(0); return; } try { const { ctx, out } = audioRef.current; const t = ctx.currentTime; out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.linearRampToValueAtTime(0.0001, t+0.06); setTimeout(()=>{ try{ ctx.close(); }catch{} audioRef.current=null; }, 80); } finally { cancelAnimationFrame(rafRef.current); setIsPlaying(false); setPlayProgress(0); } }
+  function stop(){ if (!audioRef.current){ setIsPlaying(false); setPlayProgress(0); return; } try { const { ctx, out, src } = audioRef.current; const t = ctx.currentTime; if (src){ try{ src.stop(); }catch{} } out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.linearRampToValueAtTime(0.0001, t+0.06); setTimeout(()=>{ try{ ctx.close(); }catch{} audioRef.current=null; }, 80); } finally { cancelAnimationFrame(rafRef.current); setIsPlaying(false); setPlayProgress(0); } }
 
   function ensureResume(ctx){ if (ctx.state==="suspended" && ctx.resume){ try{ ctx.resume(); }catch{} } }
 
-  function play(){ if (audioRef.current){ stop(); return; } const Ctx = window.AudioContext || window.webkitAudioContext; const ctx = new Ctx(); ensureResume(ctx); const out = ctx.createGain(); out.gain.value = 0.85; const comp = ctx.createDynamicsCompressor(); comp.threshold.value=-12; comp.knee.value=22; comp.ratio.value=10; comp.attack.value=0.003; comp.release.value=0.25; out.connect(comp); comp.connect(ctx.destination); const prof = profile; const grid = makeGridFromTimeline({ timeline, bpm, timeSig, preset, prof, rng: seededRandom(seed), targetMin: lengthMin }); const t0 = ctx.currentTime + 0.08; const noise = createNoiseBuffer(ctx); const lowFreq = lowStringFreqFromTuning(tuning); const scaleNotes = buildScale(key, scale); const dur = stepsToSeconds(grid.steps.length, bpm); scheduleBackgroundLayer(ctx, out, t0, dur, scaleNotes); for (let i=0;i<grid.steps.length;i++){ const t = t0 + stepsToSeconds(i, bpm); if (grid.kick[i]) playKick(ctx, t, out); if (grid.snare[i]) playSnare(ctx, t, out, noise); if (grid.hat[i]) playHat(ctx, t, out); if (grid.chug[i]) playChug(ctx, t, out, lowFreq); const ld = grid.lead[i]; if (ld >= 0) playLead(ctx, t, out, freqFromNote(scaleNotes[ld % scaleNotes.length], 4)); } audioRef.current = { ctx, out }; setIsPlaying(true); setClipDuration(dur); startRaf(dur); }
+  async function play(){
+    if (audioRef.current){ stop(); return; }
+    setIsRendering(true);
+    try {
+      const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin });
+      const { mix, meta } = await songGen.generate(spec);
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      ensureResume(ctx);
+      const out = ctx.createGain();
+      out.gain.value = 0.85;
+      out.connect(ctx.destination);
+      const src = ctx.createBufferSource();
+      src.buffer = mix;
+      src.connect(out);
+      src.start();
+      audioRef.current = { ctx, out, src };
+      setIsPlaying(true);
+      setClipDuration(meta.totalSec);
+      startRaf(meta.totalSec);
+    } catch (err) {
+      console.error(err);
+      stop();
+    } finally {
+      setIsRendering(false);
+    }
+  }
 
-  async function exportClip(){ const prof = profile; const grid = makeSongGrid({ bars: 16, bpm, prof, rng: seededRandom(seed) }); await renderAndDownload(grid, `${slug(title||"anvil")}-30s.wav`); }
-  async function exportFull(){ const prof = profile; const grid = makeGridFromTimeline({ timeline, bpm, timeSig, preset, prof, rng: seededRandom(seed), targetMin: lengthMin }); await renderAndDownload(grid, `${slug(title||"anvil")}-full.wav`); }
+  async function exportClip(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetBars: 16 }); await renderAndDownload(spec, `${slug(title||"anvil")}-30s.wav`); }
+  async function exportFull(){ const spec = buildSessionSpec({ timeline, key, scale, bpm, timeSig, preset, seed, targetMin: lengthMin }); await renderAndDownload(spec, `${slug(title||"anvil")}-full.wav`); }
 
-  async function renderAndDownload(grid, name){ const sr=48000, t0=0.25; const songDur = stepsToSeconds(grid.steps.length, bpm); const bedTail=0.5, renderTail=1.0; const totalTime = t0 + songDur + bedTail + renderTail; const frames = Math.ceil(totalTime * sr); const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext; const ctx = new OfflineCtx(2, frames, sr); const master = ctx.createGain(); master.gain.value = 0.9; const lim = ctx.createDynamicsCompressor(); lim.threshold.value=-6; lim.knee.value=24; lim.ratio.value=20; lim.attack.value=0.003; lim.release.value=0.12; master.connect(lim); lim.connect(ctx.destination); const noise = createNoiseBuffer(ctx); const lowFreq = lowStringFreqFromTuning(tuning); const scaleNotes = buildScale(key, scale); scheduleBackgroundLayer(ctx, master, t0, songDur + bedTail, scaleNotes); for (let i=0;i<grid.steps.length;i++){ const t = t0 + stepsToSeconds(i, bpm); if (grid.kick[i]) playKick(ctx, t, master); if (grid.snare[i]) playSnare(ctx, t, master, noise); if (grid.hat[i]) playHat(ctx, t, master); if (grid.chug[i]) playChug(ctx, t, master, lowFreq); const ld = grid.lead[i]; if (ld >= 0) playLead(ctx, t, master, freqFromNote(scaleNotes[ld % scaleNotes.length], 4)); } const rendered = await ctx.startRendering(); const wav = bufferToWave(rendered); const a = document.createElement("a"); a.href = URL.createObjectURL(wav); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
+  async function renderAndDownload(spec, name){
+    setIsRendering(true);
+    try {
+      const { mix } = await songGen.generate(spec);
+      const wav = songGen.encodeWav(mix);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(wav);
+      a.download = name;
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRendering(false);
+    }
+  }
 
   function addSection(kind){ setTimeline(t=>[...t, kind]); }
   function onDragStart(e, i){ e.dataTransfer.setData("text/plain", String(i)); }
@@ -89,8 +150,8 @@ export default function App(){
         <div className="max-w-6xl mx-auto px-2 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3"><AnvilIcon className="w-7 h-7"/><div className="leading-tight"><div className="text-base font-semibold tracking-tight">ANVIL</div><div className="text-[11px] text-zinc-400 -mt-0.5">Metal Songsmith</div></div></div>
           <div className="flex items-center gap-2">
-            <button onClick={exportClip} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs">Export 30s</button>
-            <button onClick={exportFull} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold">Export Full</button>
+            <button onClick={exportClip} disabled={isRendering} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-xs">Export 30s</button>
+            <button onClick={exportFull} disabled={isRendering} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-xs font-semibold">Export Full</button>
           </div>
         </div>
       </header>
@@ -135,7 +196,7 @@ export default function App(){
                 </div>
                 <div className="flex items-end gap-2 justify-end">
                   {!isPlaying ? (
-                    <button onClick={play} className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold">Generate & Play</button>
+                    <button onClick={play} disabled={isRendering} className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-xs font-semibold">{isRendering ? "Rendering…" : "Generate & Play"}</button>
                   ) : (
                     <button onClick={stop} className="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold">Stop</button>
                   )}
@@ -233,6 +294,23 @@ export default function App(){
 }
 
 function friendlySectionName(section){ if (section==="pre") return "Pre‑Chorus"; return section.charAt(0).toUpperCase() + section.slice(1); }
+
+function scaleToMode(scale){ const s=(scale||"").toLowerCase(); return (s.includes("minor") || s.includes("phrygian") || s.includes("dorian") || s.includes("locrian")) ? 'minor' : 'major'; }
+function normalizeBars({ baseBars, targetMin, targetBars, bpm, timeSig }){
+  let bars = baseBars.slice();
+  if (targetBars){
+    const sum = bars.reduce((a,b)=>a+b,0) || 1;
+    const scale = targetBars / sum;
+    bars = bars.map(b=> Math.max(1, Math.round(b*scale)));
+  } else if (targetMin){
+    const secPerBar = beatsPerBarFromTimeSig(timeSig||'4/4') * beatSeconds(bpm);
+    const targetTotal = Math.max(1, Math.round((targetMin*60)/secPerBar));
+    const sum = bars.reduce((a,b)=>a+b,0) || 1;
+    const scale = targetTotal / sum;
+    bars = bars.map(b=> Math.max(1, Math.round(b*scale)));
+  }
+  return bars;
+}
 
 function Card({ title, children }){
   return (

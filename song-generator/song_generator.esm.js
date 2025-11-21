@@ -56,6 +56,12 @@ const SEMI_TO_NOTE = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const MAJOR = [0,2,4,5,7,9,11];
 const MINOR = [0,2,3,5,7,8,10];
 
+function beatsPerBarFromTs(ts){
+  const m = /^(\d+)\/(\d+)$/.exec(ts || '4/4');
+  const top = m ? parseInt(m[1], 10) : 4;
+  return Math.max(1, top);
+}
+
 function createReverbBuffer(ctx, seconds=2.4, decay=3.5){
   const rate = ctx.sampleRate;
   const length = Math.max(1, Math.floor(seconds * rate));
@@ -378,7 +384,7 @@ export class SongGenerator {
    */
   async generate(spec){
     const sr = this.sampleRate;
-    const beatsPerBar = 4;
+    const beatsPerBar = beatsPerBarFromTs(spec.ts);
     const bpm = Math.max(40, Math.min(260, Number(spec.bpm) || 120));
     const secPerBeat = 60 / bpm;
     const structure = Array.isArray(spec.structure) && spec.structure.length ? spec.structure : this.defaultSpec().structure;
@@ -389,7 +395,7 @@ export class SongGenerator {
     const keySemi = NOTE_TO_SEMI[spec.key] ?? 0;
     const harmony = makeHarmonyMap(structure, spec.progression, keySemi, spec.mode);
 
-    const fullSpec = { ...spec, bpm, structure };
+    const fullSpec = { ...spec, bpm, structure, beatsPerBar };
 
     const offlineSupported = (()=>{
       try {
@@ -406,7 +412,7 @@ export class SongGenerator {
 
     if (!offlineSupported){
       const silence = new AudioBuffer({ length, sampleRate: sr, numberOfChannels: 2 });
-      const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, sampleRate: sr };
+      const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, ts: fullSpec.ts, sampleRate: sr };
       this._lastMidi = { bpm: fullSpec.bpm, drumEvents: [], bassEvents: [], chordEvents: [], leadEvents: [] };
       return { stems: { drums: silence, bass: silence, chords: silence, lead: silence }, mix: silence, meta };
     }
@@ -421,7 +427,7 @@ export class SongGenerator {
 
     if (!toneReady){
       const silence = new AudioBuffer({ length, sampleRate: sr, numberOfChannels: 2 });
-      const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, sampleRate: sr };
+      const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, ts: fullSpec.ts, sampleRate: sr };
       this._lastMidi = { bpm: fullSpec.bpm, drumEvents: [], bassEvents: [], chordEvents: [], leadEvents: [] };
       return { stems: { drums: silence, bass: silence, chords: silence, lead: silence }, mix: silence, meta };
     }
@@ -444,10 +450,10 @@ export class SongGenerator {
 
     const mix = await this.#mix([drums,bass,chords,lead]);
 
-    const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, sampleRate: sr };
+    const meta = { totalBars, totalBeats, totalSec, key: fullSpec.key, mode: fullSpec.mode, bpm: fullSpec.bpm, ts: fullSpec.ts, sampleRate: sr };
 
     // attach midi events for export helper
-    this._lastMidi = { bpm: spec.bpm, drumEvents, bassEvents, chordEvents, leadEvents };
+    this._lastMidi = { bpm: fullSpec.bpm, drumEvents, bassEvents, chordEvents, leadEvents };
     return { stems: {drums, bass, chords, lead}, mix, meta };
   }
 
@@ -463,7 +469,7 @@ export class SongGenerator {
   // ----- Private: Synthesis Engines -----
 
   async #renderDrums(length, sr, spec, midiOut){
-    const beatsPerBar = 4;
+    const beatsPerBar = beatsPerBarFromTs(spec.ts);
     const secPerBeat = 60 / spec.bpm;
     const totalBars = Math.max(1, spec.structure.reduce((a,b)=>a+(b?.bars||0), 0));
     const totalBeats = totalBars * beatsPerBar;
@@ -525,7 +531,7 @@ export class SongGenerator {
   }
 
   async #renderBass(length, sr, spec, harmony, midiOut){
-    const beatsPerBar = 4;
+    const beatsPerBar = beatsPerBarFromTs(spec.ts);
     const secPerBeat = 60 / spec.bpm;
     const totalBars = Math.max(1, harmony.length || 0);
     const totalBeats = totalBars * beatsPerBar;
@@ -549,7 +555,7 @@ export class SongGenerator {
       for(let bar=0; bar<totalBars; bar++){
         const chord = harmony[bar].notes;
         const root = clamp(chord[0]-12, 36, 60); // C2..B3
-        for(let i=0;i<4;i++){
+        for(let i=0;i<beatsPerBar;i++){
           const t = beatCounter * secPerBeat;
           Tone.Transport.schedule(time=>{
             bass.triggerAttackRelease(Tone.Frequency(root, 'midi'), secPerBeat * 0.95, time, 0.8);
@@ -563,7 +569,7 @@ export class SongGenerator {
   }
 
   async #renderChords(length, sr, spec, harmony, midiOut){
-    const beatsPerBar = 4;
+    const beatsPerBar = beatsPerBarFromTs(spec.ts);
     const secPerBeat = 60 / spec.bpm;
     const totalBars = Math.max(1, harmony.length || 0);
     const totalBeats = totalBars * beatsPerBar;
@@ -596,7 +602,7 @@ export class SongGenerator {
   }
 
   async #renderLead(length, sr, spec, harmony, midiOut){
-    const beatsPerBar = 4;
+    const beatsPerBar = beatsPerBarFromTs(spec.ts);
     const secPerBeat = 60 / spec.bpm;
     const totalBars = Math.max(1, harmony.length || 0);
     const totalBeats = totalBars * beatsPerBar;
